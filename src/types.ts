@@ -8,7 +8,12 @@ export type Question = {
 export type Evidence = {
   name: string;
   value: string;
-  source: 'request header' | 'server observed' | 'browser reported' | 'integration reported';
+  source:
+    | 'request header'
+    | 'server observed'
+    | 'browser reported'
+    | 'integration reported'
+    | 'agent reported';
   note?: string;
 };
 export type Site = {
@@ -19,6 +24,7 @@ export type Site = {
   questionsVersion: number;
   questions: Question[];
   hasIngestKey: boolean;
+  collectorOrigin?: string;
 };
 export type Visit = {
   id: string;
@@ -27,7 +33,7 @@ export type Visit = {
   updatedAt: string;
   expiresAt: string;
   status: 'awaiting' | 'admitted' | 'observed' | 'revoked' | 'expired';
-  source: 'gateway' | 'browser' | 'server';
+  source: 'gateway' | 'browser' | 'server' | 'agent';
   isDemo: boolean;
   userAgent: string;
   ip: string;

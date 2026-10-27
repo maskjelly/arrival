@@ -12,7 +12,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open **http://127.0.0.1:3000** for the landing page or **http://127.0.0.1:3000/app** for the workspace. The dashboard automatically creates an owner session when accessed directly from localhost. It starts with an empty database; **Run a demo agent** makes real HTTP requests through the gate and labels the resulting visit as a controlled demo.
+Open **http://127.0.0.1:3000** for the landing page or **http://127.0.0.1:3000/app** for the workspace. The dashboard automatically creates an owner session when accessed directly from localhost. It starts with an empty database; **Run a demo agent** makes real HTTP requests through the instrumented demo and labels the resulting visit as a controlled demo.
 
 The app stores records in `.data/arrival.sqlite`. Restarting preserves visits, questions and configuration. No external account or model key is needed.
 
@@ -20,36 +20,33 @@ The app stores records in `.data/arrival.sqlite`. Restarting preserves visits, q
 
 - Owner dashboard with real counts, time series, filters and visit inspection.
 - Custom short/long-answer, single-choice and multiple-choice questions, with required fields and saved schema versions.
-- Protected demo at `/lab`: HTML form for browser/computer-use agents, JSON challenge for HTTP clients, one-hour server-enforced grants, revocation, search, downloads and a local shortlist action.
+- Open demo at `/lab`: immediate access, optional nonmodal browser questions, structured JSON for HTTP clients, search, downloads and a local shortlist action. Mandatory demo admission is an explicit advanced setting.
 - Embeddable browser tracker: page views, selected browser context, scroll milestones, visibility, explicitly annotated clicks and optional questions.
-- Authenticated server ingestion and an Express reporting adapter in `sdk/arrival.ts` for clients that do not execute JavaScript.
+- Authenticated ingestion and Express/Web Request reporting helpers for clients that do not execute JavaScript.
+- Platform-specific snippet setup and real origin-based installation verification.
 - JSON export with answers, question snapshots, evidence and events; CSV summary export.
 
 ## Try it
 
 1. Click **Run a demo agent**. Inspect its answers and activity.
 2. Open **Questions**, add your own question, and save it.
-3. Open `/lab` in a new browser session to complete the live questionnaire.
+3. Open `/lab`. Browse immediately; open **Share your task (optional)** to answer questions.
 4. In **Connect a website**, save your website's exact origin and copy the tracking script. Choose suspected automation, every visitor, or tracking only.
-5. Generate a server ingestion key if you also want HTTP-only request data. Copy `sdk/arrival.ts` into the host service and install its reporting middleware after your session middleware.
+5. For HTTP-only request evidence, generate a server ingestion key and install the Express or Web Request helper. See [platform installation](integrations.md).
 
-Browser questions are voluntary and dismissible. The script does not secure the host website. The included demo uses actual server enforcement; protecting another site's content requires equivalent middleware at that site's boundary.
+Questions are voluntary and dismissible. The prompt stays collapsed until opened, and telemetry failure never changes website access. Detection is heuristic. Blocking is not part of the installation. Existing databases preserve their saved advanced demo policy; turn it off in Questions to use observation.
 
 ## HTTP check-in
 
-Request `/lab` with `Accept: application/json`. The 403 response contains:
+Read `/api/agent/manifest/site_local` for the optional reporting protocol and public questions. `/.well-known/arrival.json` is a single-site alias. The HTML embed includes a discovery link for non-JavaScript agents. The manifest is an Arrival convention, not a universal agent standard.
 
-- `sessionToken`: credential for the pending visit.
-- `questions`: the exact question snapshot to answer.
-- `checkInEndpoint`: `/api/agent/check-in`.
+Clients that can POST may create an observation session and submit answers through `/api/agent/collect/site_local`. These events are labeled **agent reported**. Read-only clients can keep browsing without answering. See [the complete protocol and install examples](integrations.md).
 
-POST `{ "sessionToken": "...", "answers": { "question_id": "answer" } }` to that endpoint. Multiple-choice answers are arrays. On success, use the **new** returned token as `Authorization: Bearer <sessionToken>` on `/lab` requests. The old token is invalidated. Browser clients receive an HttpOnly cookie instead.
-
-Read permission is granted on admission. The default `actions` question controls search and download permissions. Its option values are `Read pages`, `Search`, and `Download files`. Changing/removing those built-in option values affects those grants; arbitrary custom question answers never grant additional permissions.
+For the demo specifically, requesting `/lab` with `Accept: application/json` returns HTTP 200, content and optional check-in context. A voluntary declaration does not grant permissions or change the observation token. Only the explicit advanced admission mode uses scoped grants, token rotation and protected API challenges. Its HTML questionnaire is HTTP 200 so browsers can read it.
 
 ## Data and evidence
 
-Request headers are client-controlled claims. Browser properties and task answers can be invented. The UI deliberately separates **server observed**, **request header**, **browser reported**, and **integration reported** evidence. No operator identity is cryptographically verified in this version.
+Request headers are client-controlled claims. Browser properties and task answers can be invented. The UI deliberately separates **server observed**, **request header**, **browser reported**, **agent reported**, and **integration reported** evidence. No operator identity is cryptographically verified in this version.
 
 Collected browser context includes user-agent, automation flag, language, timezone, platform, viewport/screen, available hardware hints, touch support and cookie capability. Request queries and referrer queries are stripped. Input contents and page text are not captured. A user's voluntarily supplied search query and questionnaire answers are recorded.
 
@@ -75,7 +72,7 @@ HOST=0.0.0.0 ADMIN_PASSWORD='choose-a-long-private-password' npm start
 
 Set the password through your deployment's private environment, not client code. Public-interface binding is refused without it. Use HTTPS. If a local reverse proxy terminates TLS, configure `TRUST_PROXY=loopback`; for other topologies, configure only the actual trusted proxy addresses. Without trusted proxy configuration, forwarded headers are not accepted as authoritative.
 
-Configuration: `PORT` (default 3000), `HOST` (default 127.0.0.1), `DATABASE_PATH`, `ADMIN_PASSWORD`, `TRUST_PROXY`.
+Configuration: `PORT` (default 3000), `HOST` (default 127.0.0.1), `DATABASE_PATH`, `ADMIN_PASSWORD`, `TRUST_PROXY`, `PUBLIC_URL` (public collector origin used in snippets and manifests).
 
 This MVP has one site and one owner. SQLite writes are synchronous, there is no durable ingestion queue or automatic retention job, and dashboard/export queries currently return the latest 300 visits; a visit timeline returns at most 1,500 events. The all-time chart displays the latest seven days. Records beyond display limits remain in SQLite. It is not a production multi-tenant service.
 

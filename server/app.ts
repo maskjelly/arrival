@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 import { Store, credential, hash } from './store.ts';
 import { cleanPath, cleanReferrer, identify } from './signals.ts';
-import { catalog, gatePage, labPage } from './pages.ts';
+import { catalog, gatePage, labPage, checkInPage } from './pages.ts';
 import type { Question, Visit } from '../src/types.ts';
 
 const text = (max = 2000) => z.string().trim().max(max);
@@ -25,7 +25,8 @@ const configSchema = z
       .refine(
         (v) => ['http:', 'https:'].includes(new URL(v).protocol),
         'Use an HTTP or HTTPS origin.',
-      ),
+      )
+      .transform((v) => new URL(v).origin),
     requireAdmission: z.boolean(),
     questions: z.array(questionSchema).min(1).max(20),
   })
@@ -138,9 +139,20 @@ function answerErrors(questions: Question[], answers: Visit['answers']) {
 }
 
 export function createApp(
-  options: { databasePath?: string; adminPassword?: string; trustedProxy?: string } = {},
+  options: {
+    databasePath?: string;
+    adminPassword?: string;
+    trustedProxy?: string;
+    publicOrigin?: string;
+  } = {},
 ) {
   const store = new Store(options.databasePath ?? resolve('.data/arrival.sqlite'));
+  if (options.publicOrigin) {
+    const url = new URL(options.publicOrigin);
+    if (!['http:', 'https:'].includes(url.protocol))
+      throw new Error('PUBLIC_URL must be an HTTP(S) URL.');
+    store.collectorOrigin = url.origin;
+  }
   const app = express();
   app.disable('x-powered-by');
   if (options.trustedProxy) app.set('trust proxy', options.trustedProxy);
@@ -160,7 +172,7 @@ export function createApp(
   const limits = new Map<string, { count: number; reset: number }>();
   function rateLimit(prefix: string, max: number) {
     return (req: Request, res: Response, next: NextFunction) => {
-      const key = `${prefix}:${req.socket.remoteAddress}`,
+      const key = `${prefix}:${req.ip}`,
         time = Date.now();
       if (limits.size > 5000) for (const [k, v] of limits) if (v.reset < time) limits.delete(k);
       let item = limits.get(key);
@@ -244,6 +256,19 @@ export function createApp(
   });
   app.use('/api/admin', freshRequest, owner);
   app.get('/api/admin/site', (_req, res) => res.json(store.site()));
+  app.get('/api/admin/installation', (_req, res) => {
+    const browser = store.db
+      .prepare(
+        "SELECT MAX(created_at) AS lastSeen, COUNT(DISTINCT session_id) AS visits FROM events WHERE type='page_view' AND source='browser reported' AND json_extract(data,'$.origin')=?",
+      )
+      .get(store.site().origin);
+    const server = store.db
+      .prepare(
+        "SELECT MAX(updated_at) AS lastSeen, COUNT(*) AS visits FROM sessions WHERE source='server'",
+      )
+      .get();
+    res.json({ browser, server });
+  });
   app.put('/api/admin/site', (req, res) => {
     const body = validate(configSchema, req.body, res);
     if (!body) return;
@@ -406,7 +431,12 @@ export function createApp(
     );
     if (!body) return;
     const visit = store.byToken(body.sessionToken);
-    if (!visit || visit.status !== 'awaiting') {
+    if (
+      !visit ||
+      !['gateway', 'agent'].includes(visit.source) ||
+      !['awaiting', 'observed'].includes(visit.status) ||
+      Object.keys(visit.answers).length
+    ) {
       res.status(409).json({
         error: 'This check-in is no longer active. Reload the original page to start again.',
       });
@@ -426,6 +456,18 @@ export function createApp(
         { method: 'POST', status: 422 },
       );
       res.status(422).json({ error: 'Check the highlighted answers.', fields });
+      return;
+    }
+    if (!store.site().requireAdmission || visit.status === 'observed' || visit.source === 'agent') {
+      store.declare(visit.id, body.answers, 'agent reported');
+      res.json({
+        ok: true,
+        sessionId: visit.id,
+        sessionToken: body.sessionToken,
+        enforced: false,
+        identityVerified: false,
+        continueTo: visit.entryPath,
+      });
       return;
     }
     const actions = body.answers.actions;
@@ -475,6 +517,49 @@ export function createApp(
     res.json({ ok: true });
   });
 
+  function manifest(req: Request) {
+    const site = store.site(),
+      base = store.collectorOrigin ?? `${req.protocol}://${req.get('host')}`;
+    return {
+      version: '1.0',
+      name: 'Arrival optional agent observability',
+      siteId: site.id,
+      website: site.origin,
+      optional: true,
+      blocksAccess: false,
+      instructions:
+        'Continue your task normally. If your tools allow it, optionally share a short task summary. Never send private prompts, credentials or personal information. Skipping or a telemetry failure does not restrict website access.',
+      questions: site.questions,
+      questionsVersion: site.questionsVersion,
+      collectionEndpoint: `${base}/api/agent/collect/${site.id}`,
+      browserCheckIn: `${base}/check-in/${site.id}`,
+      protocol: [
+        'POST collectionEndpoint with JSON {type:"start", path:"/page-you-are-visiting"}.',
+        'Use the returned sessionToken as Authorization: Bearer <token> for subsequent reports. Reuse that token on start to continue a visit.',
+        'POST {type:"check_in", path:"/current-page", answers:{question_id:answer}} to the same endpoint. Use the questions returned by start. Multiple-choice answers are arrays.',
+        'Optionally POST {type:"event", path:"/current-page", event:{id:"UUID", type:"page_view", path:"/current-page"}}. Reports are declarations, not independently observed requests.',
+      ],
+      example: { type: 'start', path: '/' },
+      identityVerified: false,
+    };
+  }
+  app.get(['/.well-known/arrival.json', '/api/agent/manifest/:siteId'], (req, res) => {
+    if (req.params.siteId && req.params.siteId !== store.site().id) {
+      res.status(404).json({ error: 'Site not found.' });
+      return;
+    }
+    res
+      .set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
+      .json(manifest(req));
+  });
+  app.get('/check-in/:siteId', (req, res) => {
+    if (req.params.siteId !== store.site().id) {
+      res.sendStatus(404);
+      return;
+    }
+    res.set('Cache-Control', 'no-store').type('html').send(checkInPage(store.site()));
+  });
+
   app.use(['/lab', '/api/lab'], rateLimit('gateway', 600), (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     let token = sessionToken(req),
@@ -483,10 +568,11 @@ export function createApp(
       !visit ||
       visit.source !== 'gateway' ||
       visit.status === 'expired' ||
-      visit.status === 'revoked'
+      visit.status === 'revoked' ||
+      (store.site().requireAdmission && visit.status === 'observed')
     ) {
       const userAgent = (req.get('user-agent') ?? '').slice(0, 1000),
-        ip = req.socket.remoteAddress ?? '';
+        ip = req.ip ?? '';
       const created = store.createSession({
         source: 'gateway',
         userAgent,
@@ -508,6 +594,16 @@ export function createApp(
       );
     }
     res.locals.visit = visit;
+    res.locals.arrival = {
+      token,
+      questions: visit.questions,
+      optional: !store.site().requireAdmission,
+      answered: Object.keys(visit.answers).length > 0,
+    };
+    res.set(
+      'Link',
+      `</api/agent/manifest/${store.site().id}>; rel="alternate"; type="application/json"; title="Optional agent check-in"`,
+    );
     if (store.site().requireAdmission && visit.status !== 'admitted') {
       store.event(
         visit.id,
@@ -527,7 +623,7 @@ export function createApp(
           'POST { sessionToken, answers: { question_id: answer } }. Use the returned sessionToken as Authorization: Bearer <token> for protected requests. Do not include private prompts or credentials.',
       };
       if ((req.get('accept') ?? '').includes('text/html') && req.method === 'GET')
-        res.status(403).type('html').send(gatePage(visit, token));
+        res.status(200).type('html').send(gatePage(visit, token));
       else res.status(403).json(challenge);
       return;
     }
@@ -536,7 +632,11 @@ export function createApp(
       : req.originalUrl.includes('/download/')
         ? 'download'
         : 'read';
-    if (visit.status === 'admitted' && !visit.permissions.includes(permission)) {
+    if (
+      store.site().requireAdmission &&
+      visit.status === 'admitted' &&
+      !visit.permissions.includes(permission)
+    ) {
       store.event(
         visit.id,
         'access_denied',
@@ -593,33 +693,52 @@ export function createApp(
       return;
     }
     store.event(visit.id, 'page_view', path, {}, { status: 200 });
-    res.type('html').send(labPage(path, visit));
+    const html = labPage(path, visit, res.locals.arrival);
+    if ((req.get('accept') ?? '').includes('application/json')) {
+      res.json({
+        page: { path, html },
+        optional: true,
+        sessionToken: res.locals.arrival.token,
+        questions: visit.questions,
+        checkInEndpoint: '/api/agent/check-in',
+        instructions:
+          'Content is available without answering. Optional: POST {sessionToken, answers} to checkInEndpoint; reuse the returned token for this visit.',
+      });
+    } else res.type('html').send(html);
   });
 
-  app.options('/api/collect/:siteId', (req, res) => {
-    if (
-      String(req.params.siteId) !== store.site().id ||
-      req.get('origin') !== store.site().origin
-    ) {
+  const collectorPaths = ['/api/collect/:siteId', '/api/agent/collect/:siteId'];
+  function collectorOrigin(req: Request) {
+    const origin = req.get('origin');
+    return (
+      origin === store.site().origin ||
+      origin === `${req.protocol}://${req.get('host')}` ||
+      (!origin && req.path.startsWith('/api/agent/collect/'))
+    );
+  }
+  app.options(collectorPaths, (req, res) => {
+    if (String(req.params.siteId) !== store.site().id || !collectorOrigin(req)) {
       res.sendStatus(403);
       return;
     }
     res
       .set({
-        'Access-Control-Allow-Origin': store.site().origin,
+        'Access-Control-Allow-Origin': req.get('origin') ?? store.site().origin,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         Vary: 'Origin',
       })
       .sendStatus(204);
   });
-  app.post('/api/collect/:siteId', rateLimit('collect', 600), (req, res) => {
+  app.post(collectorPaths, rateLimit('collect', 600), (req, res) => {
     const site = store.site();
-    if (String(req.params.siteId) !== site.id || req.get('origin') !== site.origin) {
+    if (String(req.params.siteId) !== site.id || !collectorOrigin(req)) {
       res.status(403).json({ error: 'Configure this website’s exact origin in Arrival first.' });
       return;
     }
-    res.set({ 'Access-Control-Allow-Origin': site.origin, Vary: 'Origin' });
+    res.set({ 'Access-Control-Allow-Origin': req.get('origin') ?? site.origin, Vary: 'Origin' });
+    const channel = req.path.startsWith('/api/agent/collect/') ? 'agent' : 'browser';
+    const provenance = channel === 'agent' ? 'agent reported' : 'browser reported';
     const body = validate(
       z
         .object({
@@ -643,14 +762,15 @@ export function createApp(
       let token: string | undefined;
       if (
         !visit ||
-        visit.source !== 'browser' ||
+        !['browser', 'agent'].includes(visit.source) ||
         visit.status === 'expired' ||
         visit.status === 'revoked'
       ) {
         const ua = (req.get('user-agent') ?? '').slice(0, 1000),
-          ip = req.socket.remoteAddress ?? '';
+          ip = req.ip ?? '';
         const created = store.createSession({
-          source: 'browser',
+          source: channel,
+          isDemo: ua.startsWith('Arrival-DemoAgent/'),
           userAgent: ua,
           ip,
           referrer: cleanReferrer(body.referrer ?? ''),
@@ -660,19 +780,27 @@ export function createApp(
         visit = created.visit;
         token = created.token;
       }
-      if (body.environment) store.environment(visit.id, body.environment);
-      store.event(visit.id, 'page_view', cleanPath(body.path), {}, { source: 'browser reported' });
+      if (body.environment) store.environment(visit.id, body.environment, provenance);
+      store.event(
+        visit.id,
+        'page_view',
+        cleanPath(body.path),
+        { origin: req.get('origin') ?? '' },
+        { source: provenance },
+      );
       res.json({
         sessionId: visit.id,
         questions: visit.questions,
         answered: Object.keys(visit.answers).length > 0,
+        optional: true,
+        blocksAccess: false,
         ...(token ? { sessionToken: token } : {}),
       });
       return;
     }
     if (
       !visit ||
-      visit.source !== 'browser' ||
+      !['browser', 'agent'].includes(visit.source) ||
       visit.status === 'revoked' ||
       visit.status === 'expired'
     ) {
@@ -693,7 +821,7 @@ export function createApp(
         res.status(422).json({ error: 'Please complete the required questions.', fields });
         return;
       }
-      store.declare(visit.id, body.answers);
+      store.declare(visit.id, body.answers, provenance);
       res.json({ ok: true, enforced: false });
       return;
     }
@@ -707,7 +835,7 @@ export function createApp(
       event.type,
       cleanPath(event.path),
       { label: event.label, depth: event.depth, state: event.state },
-      { method: 'POST', source: 'browser reported', dedupeKey: `${visit.id}:${event.id}` },
+      { method: 'POST', source: provenance, dedupeKey: `${visit.id}:${event.id}` },
     );
     res.json({ ok: true });
   });
@@ -723,7 +851,7 @@ export function createApp(
           sessionId: text(120).min(1),
           method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']),
           path: text(700),
-          status: z.number().int().min(100).max(599),
+          status: z.number().int().min(100).max(599).optional(),
           userAgent: text(1000),
           ip: text(100).optional(),
           referrer: text(700).optional(),
@@ -821,6 +949,7 @@ export function createApp(
     }
     res.json({ sessionId: grant.sessionId });
   });
+  app.use('/sdk', express.static(resolve('sdk'), { maxAge: 0, index: false }));
   app.use(express.static(resolve('public'), { maxAge: 0 }));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

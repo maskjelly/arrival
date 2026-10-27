@@ -1,60 +1,54 @@
-# Arrival MVP architecture
+# Arrival architecture
 
-Status: implemented locally, 27 October 2026. Audience: the developer maintaining this prototype.
-
-## Components
+Arrival is an observability layer. A website's content stays available while visitors optionally share task context. Detection, declared intent, observed activity and access control are separate concepts.
 
 ```mermaid
 flowchart LR
-  A[Browser or HTTP agent] --> G[Protected demo gateway]
-  G --> Q[Versioned questionnaire]
-  Q --> P[Session grant and permission checks]
-  P --> W[Demo pages and actions]
-  G --> DB[(SQLite)]
-  Q --> DB
-  W --> DB
-  B[Website browser tracker] --> C[Origin-restricted collector]
-  C --> DB
-  S[Host server adapter] --> I[Key-authenticated ingestion]
+  B[Browser visiting host website] --> T[Async tracker]
+  T --> C[Origin-restricted collector]
+  A[Cooperative HTTP agent] --> M[Public questions and protocol]
+  M --> D[Optional declaration collector]
+  H[Host server or proxy] --> I[Private-key request ingestion]
+  C --> DB[(SQLite)]
+  D --> DB
   I --> DB
-  DB --> D[Owner API and React dashboard]
+  DB --> UI[Owner workspace and exports]
 ```
 
-The Express process owns both request authorization and writes. Vite serves the React application in development; a production build is served as static files. The public landing page is `/`; the owner workspace is `/app`. The landing page uses an explicitly illustrative visit and never bootstraps an owner session or reads private workspace data. No external service is needed for the local MVP.
+## Browser collection
 
-## Three collection paths
+A public script and site ID install without a package or private key. The optional static manifest link exposes question discovery in the original HTML. `public/tracker.js` reports page views, bounded environment hints, scroll milestones, visibility and explicitly annotated clicks. It observes pathname changes through browser history, skips query-only changes, prevents duplicate initialization and resumes the server-issued visit token from per-tab session storage.
 
-**Protected gateway:** `/lab` creates an opaque visit credential and records an arrival. With admission enabled, it withholds the actual content and returns a visible form or JSON challenge. Required answers are validated against the visit's saved questionnaire snapshot. Admission rotates the credential and grants `read`, and optionally `search` and `download`, for one hour. Each protected request loads the session and checks permissions. Revoked or expired grants cannot access content; the visitor must start another check-in.
+Suspected automation can see a collapsed, nonmodal prompt. It never takes focus, hides content or changes website authorization. Dismissal persists for the tab; answered visits are not prompted again. Required question fields only constrain voluntary submissions. `window.arrival` exposes readiness, explicit check-in, answers, annotated actions and a per-page disable switch. Requests time out after four seconds; reporting errors are contained.
 
-**Browser collection:** `public/tracker.js` calls `/api/collect/:siteId` from the configured exact origin. A random server-issued credential is retained in per-tab session storage. Page views, bounded environment hints and annotated events are recorded. The optional form is rendered in a shadow root and can be dismissed. Answers here are declarations without access grants. Origin/CORS restrictions reduce unwanted browser collection but are not cryptographic caller authentication; an HTTP client can forge an Origin header and public telemetry.
+The browser endpoint accepts the site's configured exact origin and the collector's own origin for its hosted optional questionnaire. CORS and a public token are abuse-reduction mechanisms, not cryptographic caller verification. An HTTP client can forge public telemetry.
 
-**Server collection:** `sdk/arrival.ts` reports a finished host request to `/api/ingest` using a private ingestion key. The adapter's session ID groups requests. Event IDs are deduplicated; key rotation immediately invalidates the old key. Request metadata is marked integration-reported because this process did not observe the original connection. Reporting errors do not change the host response. There is no retry queue, so delivery is best-effort.
+## HTTP agent discovery and declarations
 
-## Storage and provenance
+`GET /api/agent/manifest/:siteId` and the single-site alias `/.well-known/arrival.json` return HTTP 200 with public questions, version, optionality and request shapes. No ingestion key or owner records are exposed. HTML installs include a discovery link; server adapters can also set a Link header. This is an Arrival convention, not a universally implemented agent standard.
 
-`server/store.ts` creates four tables:
+`POST /api/agent/collect/:siteId` accepts `start`, `check_in` and event reports. It permits HTTP clients without Origin, but rejects an explicitly foreign browser Origin. Tokens identify a visit, preserve its question snapshot and can resume it across reported pages. Records use the `agent` source and events are labeled `agent reported`. They must not be presented as independently observed requests.
 
-- `sites`: one site's origin, questionnaire, version and hashed ingestion key.
-- `sessions`: hashed credential, source, timestamps, context, questionnaire snapshot, answers, classification and grants.
-- `events`: append-only observations with method/path/status, provenance and deduplication key.
-- `admin_sessions`: hashed owner credentials with eight-hour expiry.
+A read-only client can ignore check-in and continue its task. Tools that cannot POST cannot submit structured answers. This limits data collection, not website access.
 
-The database uses WAL and prepared statements. Credentials are never returned through owner session inspection or exports. A question edit affects new visits; historical answers retain their original question wording and options.
+## Host request evidence
 
-Detection in `server/signals.ts` is deliberately explainable: known self-identifying user-agent strings and basic browser automation hints. `unknown` is an ordinary outcome. No classifier score or verified-agent badge is fabricated. The controlled runner makes actual HTTP requests but can declare its own name; it is still not cryptographically verified.
+`POST /api/ingest` requires a private, rotatable ingestion key. It accepts deduplicated request IDs, a host session ID and bounded request metadata. Queries and referrer queries are removed. The source is `integration reported`, because Arrival did not observe the original connection.
 
-## Access and failure behavior
+`sdk/arrival.ts` reports Express responses after `finish` and can create its own opaque session cookie. `sdk/web.ts` accepts a Web Request and works with a host's background `waitUntil` mechanism. If the host cannot observe the final response status, that field is omitted and stored as unknown. Both helpers contain reporting and error-hook failures. There is no durable queue. Browser and host-server visit records are currently separate; automatic cross-channel merging is not implemented.
 
-Owner APIs require an owner session. Direct localhost bootstrapping is available only without `ADMIN_PASSWORD`, with both loopback connection and localhost Host checks. Mutations reject foreign origins. A configured password disables local bootstrap. A deployment binding a public interface must configure a password; HTTPS/trusted proxy setup remains the deployer's responsibility.
+## Instrumented demonstration
 
-Request bodies, questions, answers and event fields are bounded. Unknown answer keys, invalid choice values and incomplete required answers are rejected. Protected responses are not cacheable. A browser failing to execute telemetry can still complete the server questionnaire. Tracking failures must not be interpreted as proof of hostile automation.
+`/lab` records actual page requests and serves content immediately by default. It exposes optional questions through HTML and JSON, preserves a visit cookie, and records searches, downloads and a local shortlist action. The public temporary testing facade maps its homepage directly to this demo and keeps owner routes private.
 
-Session revocation invalidates one grant, not an agent identity. The same caller may start a new questionnaire. Preventing that requires stronger identity and policy, not simply a browser fingerprint.
+An advanced owner switch can still enable demo-only mandatory admission. Its browser questionnaire is HTTP 200, while protected API requests can return a JSON 403 challenge. Valid answers then rotate credentials and grant one-hour scoped access. This legacy demo feature is off by default and is unrelated to installing the observability embed. Existing saved policies are preserved on upgrade; switch off the advanced option to use observation.
 
-## MVP limits and next decisions
+## Storage and owner access
 
-There is one owner/site, synchronous SQLite storage, local rate limiting and no durable ingestion queue, retention automation, identity verification or third-party WAF integration. Dashboard and JSON/CSV exports show the latest 300 visits; timeline inspection caps at 1,500 events. The database retains records beyond those limits.
+`server/store.ts` maintains sites, visits, events and hashed owner sessions in SQLite, with WAL, prepared statements and versioned question snapshots. Credentials are excluded from owner inspection and exports. Direct local bootstrap requires a loopback connection and localhost Host; a configured password disables bootstrap. Public-interface binding requires an owner password. Mutations reject foreign origins.
 
-Before production use, decide whether admission is mandatory on protected operations or voluntary for analytics. Add tenant authorization, durable collection, retention controls and measured false-positive handling before expanding deployment. Operator authentication (for example signed-agent verification) should be a separate module from task answers and authorization.
+The API validates bounded questions, answers, paths and event fields. Agent names and task summaries are unverified claims. IP metadata can describe a proxy, not a user or location. Trust forwarded headers only from configured reverse proxies. The public landing page uses an illustrative visit, not private workspace records.
 
-Relevant boundaries: [OWASP authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), [HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421.html), [Cloudflare JavaScript detection limits](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/).
+## Current limits
+
+One owner/site; synchronous local storage; no durable queue, tenant isolation, retention automation, verified operators or complete CDN log connectors. Display/export limits are the latest 300 visits and 1,500 events per timeline. Records beyond those limits remain in SQLite. HTML snippets do not collect HTTP-only crawler requests on Wix or Shopify. A persistent HTTPS collector is still required for external websites.

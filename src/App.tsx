@@ -29,6 +29,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import BuildStatus from './BuildStatus.tsx';
+import InstallGuide from './InstallGuide.tsx';
 import type { Overview, Question, Site, Visit, VisitEvent } from './types.ts';
 
 class ApiError extends Error {
@@ -68,9 +69,12 @@ const time = (value: string) =>
 const count = (value: number) =>
   new Intl.NumberFormat('en', { notation: value > 9999 ? 'compact' : 'standard' }).format(value);
 const sourceName = (value: string) =>
-  ({ gateway: 'Protected website', browser: 'Browser tracker', server: 'Server integration' })[
-    value
-  ] || value;
+  ({
+    gateway: 'Demo website',
+    browser: 'Browser tracker',
+    server: 'Server integration',
+    agent: 'Agent declaration',
+  })[value] || value;
 const eventName = (value: string) =>
   ({
     arrival: 'Visit started',
@@ -550,9 +554,9 @@ function OverviewPage({
       icon: ListChecks,
     },
     {
-      label: 'Access granted',
-      value: data.stats.admitted,
-      detail: 'Sessions with an active grant',
+      label: 'Suspected automation',
+      value: data.stats.automated,
+      detail: 'Header or browser signals; unverified',
       icon: CheckCircle,
     },
     {
@@ -959,7 +963,8 @@ function VisitsPage({
           onChange={(e) => setChannel(e.target.value)}
         >
           <option value="all">All sources</option>
-          <option value="gateway">Protected website</option>
+          <option value="gateway">Demo website</option>
+          <option value="agent">Agent declaration</option>
           <option value="browser">Browser tracker</option>
           <option value="server">Server integration</option>
           <option value="demo">Controlled demos</option>
@@ -996,7 +1001,7 @@ function VisitsPage({
         >
           {data.sessions.length
             ? 'Try another search or remove a filter.'
-            : 'Visit the protected demo or connect a website to collect your first session.'}
+            : 'Visit the demo or connect a website to collect your first session.'}
         </Empty>
       )}
     </section>
@@ -1063,8 +1068,8 @@ function QuestionsPage({
         <div>
           <section className="panel admission-policy">
             <div>
-              <strong>Require check-in on the protected demo</strong>
-              <p>Every demo visitor declares a purpose before accessing the content.</p>
+              <strong>Advanced: require answers on the demo</strong>
+              <p>Off by default. Your website embed always stays nonblocking.</p>
             </div>
             <button
               className={`switch ${required ? 'on' : ''}`}
@@ -1214,7 +1219,7 @@ function QuestionsPage({
             visits.
           </p>
           <a className="button secondary" href="/lab" target="_blank" rel="noreferrer">
-            Open the live gate <ArrowSquareOut size={15} />
+            Try optional check-in <ArrowSquareOut size={15} />
           </a>
           <small>To see a new version, use a new browser session or an HTTP client.</small>
         </aside>
@@ -1245,17 +1250,17 @@ function IntegrationPage({
   const [name, setName] = useState(site.name),
     [origin, setOrigin] = useState(site.origin),
     [key, setKey] = useState(''),
-    [checkIn, setCheckIn] = useState('agents'),
+    [serverKind, setServerKind] = useState('express'),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const base = window.location.origin;
+  const base = site.collectorOrigin ?? window.location.origin;
   return (
     <>
       <div className="page-heading">
         <div>
           <div className="section-context">Collection setup</div>
           <h1>Turn visits into evidence.</h1>
-          <p>Start with the protected demo, then connect browser or server activity.</p>
+          <p>Save your website, choose your platform, and paste the snippet once.</p>
         </div>
       </div>
       <div className="integration-grid">
@@ -1313,45 +1318,7 @@ function IntegrationPage({
               </button>
             </form>
           </section>
-          <section className="panel setup-panel">
-            <div className="setup-heading">
-              <Code size={24} />
-              <div>
-                <h2>Browser tracker & optional check-in</h2>
-                <p>Collect browser context, activity, and answers to your questions.</p>
-              </div>
-              <span className="integration-tag">Public script</span>
-            </div>
-            <label className="collector-mode">
-              Show the optional questionnaire
-              <select
-                aria-label="Browser check-in mode"
-                value={checkIn}
-                onChange={(e) => setCheckIn(e.target.value)}
-              >
-                <option value="agents">For suspected automation</option>
-                <option value="all">For every visitor</option>
-                <option value="off">Track only</option>
-              </select>
-            </label>
-            <CodeBlock
-              value={`<script defer\n  src="${base}/tracker.js"\n  data-site="${site.id}"\n  data-check-in="${checkIn}">\n</script>`}
-              copy={copy}
-            />
-            <p className="setup-note">
-              Add this to your website. To track a control, add{' '}
-              <code>data-arrival-track="Compare plans"</code>. Form input values and page contents
-              are not collected.
-            </p>
-            <div className="inline-note">
-              <Info size={17} />
-              <p>
-                Suspected automation uses basic browser signals and can miss agents. The optional
-                questionnaire can be dismissed; server-side protection requires a separate gate.
-                HTTP-only crawlers need server collection.
-              </p>
-            </div>
-          </section>
+          <InstallGuide site={site} copy={copy} />
           <section className="panel setup-panel">
             <div className="setup-heading">
               <Key size={24} />
@@ -1391,13 +1358,58 @@ function IntegrationPage({
               Keys are shown once. Rotation immediately invalidates the previous key. Keep this key
               on your server.
             </p>
+            <label className="collector-mode">
+              Server framework
+              <select
+                aria-label="Server framework"
+                value={serverKind}
+                onChange={(e) => setServerKind(e.target.value)}
+              >
+                <option value="express">Express</option>
+                <option value="nextjs">Next.js 16+ Proxy</option>
+              </select>
+            </label>
+            <p className="setup-note">
+              Save the helper in your app’s lib folder:{' '}
+              <a href={serverKind === 'express' ? '/sdk/arrival.ts' : '/sdk/web.ts'} download>
+                {serverKind === 'express' ? 'arrival.ts' : 'web.ts'}
+              </a>
+              . Keep the ingestion key in a server environment variable.
+            </p>
             <CodeBlock
-              value={`import { arrivalAnalytics } from './sdk/arrival';\n\napp.use(arrivalAnalytics({\n  endpoint: '${base}',\n  key: process.env.ARRIVAL_INGEST_KEY,\n  sessionId: req => req.session.id,\n  onError: error => console.warn(error.message),\n}));`}
+              value={
+                serverKind === 'nextjs'
+                  ? `// proxy.ts (alongside app/). Merge with your existing proxy.
+import { NextResponse, type NextRequest, type NextFetchEvent } from 'next/server';
+import { reportArrival } from './lib/web';
+
+export function proxy(request: NextRequest, event: NextFetchEvent) {
+  const incoming = request.cookies.get('arrival_sid')?.value;
+  const sessionId = incoming && /^[a-zA-Z0-9_-]{20,120}$/.test(incoming)
+    ? incoming : crypto.randomUUID();
+  const response = NextResponse.next();
+  if (sessionId !== incoming) response.cookies.set('arrival_sid', sessionId, {
+    httpOnly: true, sameSite: 'lax', secure: request.nextUrl.protocol === 'https:',
+    path: '/', maxAge: 86400,
+  });
+  response.headers.append('Link', '<${base}/api/agent/manifest/${site.id}>; rel="alternate"; type="application/json"');
+  event.waitUntil(reportArrival(request, {
+    endpoint: '${base}', key: process.env.ARRIVAL_INGEST_KEY, sessionId,
+  }).then(() => {}));
+  return response;
+}
+
+export const config = {
+  matcher: ['/((?!api|_next|favicon.ico|robots.txt|sitemap.xml|.*\\.).*)'],
+};`
+                  : `import { arrivalAnalytics } from './lib/arrival';\n\napp.use(arrivalAnalytics({\n  endpoint: '${base}',\n  key: process.env.ARRIVAL_INGEST_KEY,\n  onError: error => console.warn(error.message),\n}));`
+              }
               copy={copy}
             />
             <p className="setup-note">
-              Use the included Express middleware after your session middleware. Your session ID
-              links requests; the collection adapter does not enforce admission.
+              Use the Express helper without a session package, or download the Web Request helper
+              for Next.js. Server reporting is best-effort and never grants or denies website
+              access.
             </p>
           </section>
           {error && (
@@ -1413,19 +1425,22 @@ function IntegrationPage({
             </span>
             <h3>Test the full journey.</h3>
             <p>
-              The built-in Northstar website has a real server-side gate, a questionnaire, limited
-              session grants and observed actions.
+              Browse the Northstar demo freely. The small optional check-in connects declared
+              purpose to observed activity.
             </p>
             <a className="button primary" href="/lab" target="_blank" rel="noreferrer">
-              Open protected demo <ArrowSquareOut size={16} />
+              Open instrumented demo <ArrowSquareOut size={16} />
             </a>
             <hr />
             <strong>HTTP agents are welcome.</strong>
             <p>
-              Request <code>/lab</code> with <code>Accept: application/json</code>. The response
-              explains the check-in contract.
+              The public manifest explains optional questions and the reporting API. No model key or
+              custom agent SDK is needed.
             </p>
-            <CodeBlock value={`curl -H 'Accept: application/json' \\\n  ${base}/lab`} copy={copy} />
+            <CodeBlock
+              value={`curl -H 'Accept: application/json' \\\n  ${base}/api/agent/manifest/${site.id}`}
+              copy={copy}
+            />
           </section>
           <div className="integration-limits">
             <ShieldWarning size={20} />
@@ -1591,7 +1606,9 @@ function VisitDrawer({
                     ))}
                   </div>
                   <div className="permission-box">
-                    <h3>Granted permissions</h3>
+                    <h3>
+                      {visit.permissions.length ? 'Demo access permissions' : 'Observation only'}
+                    </h3>
                     <div className="permission-list">
                       {visit.permissions.length ? (
                         visit.permissions.map((permission) => (
@@ -1601,7 +1618,7 @@ function VisitDrawer({
                           </span>
                         ))
                       ) : (
-                        <span>No admission grant</span>
+                        <span>Answers do not control website access</span>
                       )}
                     </div>
                     <p>
@@ -1709,24 +1726,26 @@ function VisitDrawer({
                 <DownloadSimple size={16} />
                 Export visit
               </a>
-              <button
-                className="text-button danger"
-                disabled={busy || visit.status === 'revoked'}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    await api(`/admin/sessions/${id}/revoke`, { method: 'POST' });
-                    await load();
-                    await reload();
-                  } catch (err) {
-                    setError((err as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {visit.status === 'revoked' ? 'Access revoked' : 'Revoke session access'}
-              </button>
+              {visit.permissions.length > 0 && (
+                <button
+                  className="text-button danger"
+                  disabled={busy || visit.status === 'revoked'}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await api(`/admin/sessions/${id}/revoke`, { method: 'POST' });
+                      await load();
+                      await reload();
+                    } catch (err) {
+                      setError((err as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {visit.status === 'revoked' ? 'Access revoked' : 'Revoke demo access'}
+                </button>
+              )}
             </footer>
           </>
         ) : (

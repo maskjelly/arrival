@@ -9,9 +9,14 @@ import { createApp } from '../server/app.ts';
 import { Store } from '../server/store.ts';
 import express from 'express';
 import { arrivalAnalytics } from '../sdk/arrival.ts';
+import { reportArrival } from '../sdk/web.ts';
 
-async function fixture(password?: string) {
+async function fixture(password?: string, requireAdmission = true) {
   const { app, store } = createApp({ databasePath: ':memory:', adminPassword: password });
+  if (requireAdmission) {
+    const site = store.site();
+    store.updateSite({ ...site, requireAdmission: true });
+  }
   const server = createServer(app);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -56,6 +61,179 @@ async function fixture(password?: string) {
   };
   return { store, request, post, bootstrap, challenge, admit, answers, close, base };
 }
+
+test('default observation never withholds content, even without answers or after a bad check-in', async () => {
+  const f = await fixture(undefined, false);
+  try {
+    assert.equal(f.store.site().requireAdmission, false);
+    const page = await f.request('/lab/pricing', { headers: { Accept: 'text/html' } });
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /\$49/);
+    assert.match(page.headers.get('link')!, /manifest/);
+    const json = await f.request('/lab', { headers: { Accept: 'application/json' } });
+    const context = await json.json();
+    assert.equal(json.status, 200);
+    assert.equal(context.optional, true);
+    assert.equal(
+      (await f.post('/api/agent/check-in', { sessionToken: context.sessionToken, answers: {} }))
+        .status,
+      422,
+    );
+    const headers = { Authorization: `Bearer ${context.sessionToken}` };
+    assert.equal((await f.request('/api/lab/search?q=Python', { headers })).status, 200);
+    const shared = await f.post('/api/agent/check-in', {
+      sessionToken: context.sessionToken,
+      answers: f.answers,
+    });
+    assert.equal(shared.status, 200);
+    assert.equal((await shared.json()).enforced, false);
+    const visit = f.store.byToken(context.sessionToken)!;
+    assert.equal(visit.status, 'observed');
+    assert.deepEqual(visit.permissions, []);
+    assert.equal(visit.objective, f.answers.objective);
+    const cookie = await f.bootstrap();
+    assert.equal(
+      (await f.post(`/api/admin/sessions/${visit.id}/revoke`, {}, { Cookie: cookie })).status,
+      200,
+    );
+    // Revoking an analytics record does not turn observation into access control.
+    assert.equal((await f.request('/lab/docs', { headers })).status, 200);
+  } finally {
+    await f.close();
+  }
+});
+
+test('HTTP agents discover optional questions, resume a session and submit unverified declarations', async () => {
+  const f = await fixture(undefined, false);
+  try {
+    const manifest = await (await f.request('/.well-known/arrival.json')).json();
+    assert.equal(manifest.blocksAccess, false);
+    assert.equal(manifest.optional, true);
+    assert.ok(!JSON.stringify(manifest).includes('ingest_hash'));
+    assert.equal((await f.request('/check-in/site_local')).status, 200);
+    const path = new URL(manifest.collectionEndpoint).pathname;
+    const start = await f.post(path, { type: 'start', path: '/docs?private=removed' });
+    assert.equal(start.status, 200);
+    const session = await start.json();
+    const headers = { Authorization: `Bearer ${session.sessionToken}` };
+    const resume = await f.post(path, { type: 'start', path: '/pricing' }, headers);
+    assert.equal((await resume.json()).sessionId, session.sessionId);
+    assert.equal(
+      (await f.post(path, { type: 'check_in', path: '/pricing', answers: f.answers }, headers))
+        .status,
+      200,
+    );
+    const visit = f.store.get(session.sessionId)!;
+    assert.equal(visit.source, 'agent');
+    assert.equal(visit.status, 'observed');
+    assert.equal(visit.entryPath, '/docs');
+    assert.equal(visit.pageCount, 2);
+    assert.ok(f.store.events(visit.id).every((e) => e.source === 'agent reported'));
+    assert.equal(
+      (await f.post(path, { type: 'start', path: '/' }, { Origin: 'https://wrong.example' }))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await f.post('/api/collect/site_local', { type: 'start', path: '/' })).status,
+      403,
+    );
+    const cookie = await f.bootstrap();
+    const installation = await f.request('/api/admin/installation', {
+      headers: { Cookie: cookie },
+    });
+    assert.equal((await installation.json()).browser.lastSeen, null);
+  } finally {
+    await f.close();
+  }
+});
+
+test('Web Request adapter sends request evidence without inventing response status and swallows error hooks', async () => {
+  const f = await fixture(undefined, false);
+  try {
+    const key = f.store.rotateKey();
+    const request = new Request('https://host.example/docs?private=removed', {
+      headers: { 'User-Agent': 'GPTBot/1.0' },
+    });
+    assert.equal(
+      await reportArrival(request, { endpoint: f.base, key, sessionId: 'nextjs-session' }),
+      true,
+    );
+    const visit = f.store.list('1970')[0];
+    assert.equal(visit.entryPath, '/docs');
+    assert.equal(f.store.events(visit.id)[0].status, null);
+    assert.equal(
+      await reportArrival(request, {
+        endpoint: f.base,
+        key: 'wrong',
+        sessionId: 'bad-key',
+        onError: () => {
+          throw new Error('bad logging hook');
+        },
+      }),
+      false,
+    );
+    assert.equal(
+      await reportArrival(request, { endpoint: f.base, key: undefined, sessionId: 'no-key' }),
+      false,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test('disabling advanced admission removes restrictions from existing grants and pending visits', async () => {
+  const f = await fixture();
+  try {
+    const { grant } = await f.admit({ ...f.answers, actions: ['Read pages'] });
+    const pending = await f.challenge();
+    f.store.updateSite({ ...f.store.site(), requireAdmission: false });
+    const headers = { Authorization: `Bearer ${grant.sessionToken}` };
+    assert.equal((await f.request('/api/lab/search?q=Python', { headers })).status, 200);
+    const shared = await f.post('/api/agent/check-in', {
+      sessionToken: pending.sessionToken,
+      answers: f.answers,
+    });
+    assert.equal((await shared.json()).enforced, false);
+    assert.equal(f.store.byToken(pending.sessionToken)!.status, 'observed');
+    assert.equal(
+      (
+        await f.request('/lab/pricing', {
+          headers: { Authorization: `Bearer ${pending.sessionToken}` },
+        })
+      ).status,
+      200,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test('missing or invalid Express collector configuration cannot prevent the host serving content', async () => {
+  const app = express();
+  app.use(
+    arrivalAnalytics({
+      endpoint: 'not a URL',
+      key: undefined,
+      onError: () => {
+        throw new Error('Logging failed');
+      },
+    }),
+  );
+  app.get('/', (_req, res) => res.send('Still available'));
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${(server.address() as { port: number }).port}/`,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), 'Still available');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
 
 test('owner routes require authentication; local bootstrap rejects cross-site requests', async () => {
   const f = await fixture();
@@ -225,10 +403,10 @@ test('question snapshots remain valid across owner edits; labels are HTML escape
       answers: f.answers,
     });
     assert.equal(old.status, 200);
-    assert.equal(f.store.get(c.sessionId)!.questionsVersion, 1);
+    assert.equal(f.store.get(c.sessionId)!.questionsVersion, original.questionsVersion);
     const gate = await f.request('/lab', { headers: { Accept: 'text/html' } });
     const html = await gate.text();
-    assert.equal(gate.status, 403);
+    assert.equal(gate.status, 200);
     assert.ok(html.includes('&lt;img'));
     assert.ok(!html.includes('<img src=x onerror'));
     const next = await f.challenge();

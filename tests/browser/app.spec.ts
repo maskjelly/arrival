@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
+import { installSnippet } from '../../src/install.ts';
 
 test('public landing page has interactive examples, build status, and working app navigation', async ({
   page,
@@ -68,9 +69,15 @@ test('dashboard runs an actual agent and exposes its answers, events and export'
   expect(errors).toEqual([]);
 });
 
-test('a browser completes the gate, navigates and records browser signals', async ({ page }) => {
+test('a browser browses freely, optionally shares its task and records browser signals', async ({
+  page,
+}) => {
   await page.goto('/lab');
-  await expect(page.getByRole('heading', { name: 'Tell us what brings you here.' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'A better starting point for your next integration.' }),
+  ).toBeVisible();
+  const optional = page.locator('[data-arrival-check-in]');
+  await optional.locator('summary').click();
   await page.screenshot({ path: '.data/screenshots/check-in.png', fullPage: true });
   await page.getByLabel('Which agent or tool are you using?').fill('Browser research agent');
   await page
@@ -81,7 +88,8 @@ test('a browser completes the gate, navigates and records browser signals', asyn
   await page.getByLabel('Search', { exact: true }).check();
   await page.getByLabel('Download files', { exact: true }).check();
   await page.getByLabel('How did you find this website?').fill('A controlled browser test');
-  await page.getByRole('button', { name: 'Declare purpose & continue' }).click();
+  await page.getByRole('button', { name: 'Share task', exact: true }).click();
+  await expect(optional).not.toBeAttached();
   await expect(
     page.getByRole('heading', { name: 'A better starting point for your next integration.' }),
   ).toBeVisible();
@@ -129,6 +137,34 @@ test('custom questions persist and the interface fits a phone', async ({ page })
   await page.screenshot({ path: '.data/screenshots/mobile.png', fullPage: true });
 });
 
+test('installation setup offers copyable platform snippets and checks real collection', async ({
+  page,
+}) => {
+  await page.goto('/app');
+  await page.getByRole('button', { name: /Connect a website/ }).click();
+  await expect(page.getByRole('heading', { name: 'Paste once. Keep browsing.' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Wix', exact: true }).click();
+  await expect(page.getByRole('tabpanel')).toContainText('Settings → Custom Code');
+  await expect(page.getByRole('tabpanel').locator('pre')).toContainText('data-site="site_local"');
+  await page.getByRole('tab', { name: 'Shopify', exact: true }).click();
+  await expect(page.getByRole('tabpanel')).toContainText('theme.liquid');
+  await page.getByRole('tab', { name: 'Next.js', exact: true }).click();
+  await expect(page.getByRole('tabpanel').locator('pre')).toContainText(
+    'strategy="afterInteractive"',
+  );
+  await page.getByRole('button', { name: 'Check installation', exact: true }).click();
+  await expect(page.locator('.install-verification [role="status"]')).toContainText(
+    'No browser data',
+  );
+  await page.screenshot({ path: '.data/screenshots/install-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect
+    .poll(() => page.locator('.sidebar').evaluate((el) => el.getBoundingClientRect().right))
+    .toBeLessThanOrEqual(0);
+  await page.screenshot({ path: '.data/screenshots/install-mobile.png', fullPage: true });
+});
+
 test('an external website collects voluntary answers and annotated activity through the real tracker', async ({
   page,
 }) => {
@@ -140,7 +176,7 @@ test('an external website collects voluntary answers and annotated activity thro
   const host = createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end(
-      '<!doctype html><html><head><title>External integration test</title></head><body><h1>Research documentation</h1><p>A controlled host website.</p><button data-arrival-track="Compare SDKs">Compare SDKs</button><div style="height:1400px"></div><script defer src="http://127.0.0.1:3107/tracker.js" data-site="site_local" data-check-in="all"></script></body></html>',
+      `<!doctype html><html><head><title>External integration test</title>${installSnippet('http://127.0.0.1:3107', 'site_local', 'all', 'html')}</head><body><h1>Research documentation</h1><p>A controlled host website.</p><button data-arrival-track="Compare SDKs">Compare SDKs</button><div style="height:1400px"></div></body></html>`,
     );
   });
   await new Promise<void>((done) => host.listen(0, '127.0.0.1', done));
@@ -156,15 +192,18 @@ test('an external website collects voluntary answers and annotated activity thro
     });
     expect(saved.status()).toBe(200);
     await page.goto(origin);
-    const checkIn = page.getByRole('dialog', { name: 'Optional agent check-in' });
+    const checkIn = page.locator('[data-arrival-check-in]');
     await expect(checkIn).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Research documentation' })).toBeVisible();
+    expect(await page.locator('body').evaluate((el) => el.hasAttribute('inert'))).toBe(false);
+    await checkIn.locator('summary').click();
     await checkIn.getByLabel('Which agent or tool are you using?').fill('External browser agent');
     await checkIn
       .getByLabel('What are you trying to accomplish here?')
       .fill('Choose an SDK for a client application.');
     await checkIn.getByLabel('What kind of task is this?').selectOption('Research');
     await checkIn.getByLabel('Read pages', { exact: true }).check();
-    await checkIn.getByRole('button', { name: 'Share task & continue' }).click();
+    await checkIn.getByRole('button', { name: 'Share task', exact: true }).click();
     await expect(checkIn).not.toBeVisible();
     const recorded = page.waitForResponse(
       (r) => r.url().includes('/api/collect/') && r.request().postDataJSON()?.type === 'event',
@@ -182,6 +221,72 @@ test('an external website collects voluntary answers and annotated activity thro
     expect(visit.eventTypes).toContain('purpose_declared');
     expect(visit.eventTypes).toContain('click');
     expect(visit.permissions).toEqual([]);
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('[data-arrival-check-in]')).toHaveCount(0);
+    const nextOverview = await (
+      await page.request.get('http://127.0.0.1:3107/api/admin/overview')
+    ).json();
+    expect(nextOverview.sessions.filter((v: { id: string }) => v.id === visit.id)).toHaveLength(1);
+    expect(nextOverview.sessions.find((v: { id: string }) => v.id === visit.id).pageCount).toBe(2);
+    await page.evaluate(() => {
+      history.pushState({}, '', '/pricing?private=discard');
+      history.replaceState({}, '', '/pricing?private=also-discard');
+    });
+    await expect
+      .poll(async () => {
+        const data = await (
+          await page.request.get('http://127.0.0.1:3107/api/admin/sessions/' + visit.id)
+        ).json();
+        return data.visit.pageCount;
+      })
+      .toBe(3);
+    // Duplicate snippets must not double-count a page or wrap the history API twice.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const script = document.createElement('script');
+          script.src = 'http://127.0.0.1:3107/tracker.js';
+          script.dataset.site = 'site_local';
+          script.onload = () => resolve();
+          document.head.append(script);
+        }),
+    );
+    const detail = await (
+      await page.request.get('http://127.0.0.1:3107/api/admin/sessions/' + visit.id)
+    ).json();
+    expect(detail.visit.pageCount).toBe(3);
+    expect(
+      detail.events.find(
+        (e: { type: string; path: string }) => e.type === 'page_view' && e.path === '/pricing',
+      ),
+    ).toBeTruthy();
+    const installation = await (
+      await page.request.get('http://127.0.0.1:3107/api/admin/installation')
+    ).json();
+    expect(installation.browser.lastSeen).toBeTruthy();
+    // A fresh agent can skip once; navigation keeps working and does not prompt again.
+    const freshContext = await page.context().browser()!.newContext();
+    try {
+      const fresh = await freshContext.newPage();
+      await fresh.goto(origin);
+      const prompt = fresh.locator('[data-arrival-check-in]');
+      await prompt.locator('summary').click();
+      await prompt.getByRole('button', { name: 'Skip', exact: true }).click();
+      await fresh.reload({ waitUntil: 'networkidle' });
+      await expect(fresh.locator('[data-arrival-check-in]')).toHaveCount(0);
+      await expect(fresh.getByRole('heading', { name: 'Research documentation' })).toBeVisible();
+      // Collection outage must leave the website usable and readiness must settle.
+      await fresh.route('**/api/collect/**', (route) => route.abort());
+      await fresh.reload();
+      const ready = await fresh.evaluate(
+        () => (window as unknown as { arrival: { ready: Promise<{ ok: boolean }> } }).arrival.ready,
+      );
+      expect(ready.ok).toBe(false);
+      await expect(fresh.getByRole('heading', { name: 'Research documentation' })).toBeVisible();
+    } finally {
+      await freshContext.close();
+    }
     expect(errors).toEqual([]);
   } finally {
     host.closeAllConnections();

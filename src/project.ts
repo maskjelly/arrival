@@ -23,14 +23,14 @@ export const builtFeatures = [
       'Declared objectives, discovery sources, browser hints, request metadata, and an event timeline.',
   },
   {
-    title: 'A protected demonstration site',
+    title: 'An open demonstration site',
     detail:
-      'Browser and HTTP check-in, one-hour grants, read/search/download permissions, expiry, and revocation.',
+      'Browse immediately, optionally share a task, and inspect actual page requests, searches and downloads. Blocking is an advanced demo-only option.',
   },
   {
     title: 'Browser and server collection',
     detail:
-      'An embeddable tracker with a voluntary questionnaire, plus authenticated ingestion and an Express adapter.',
+      'Copy-paste installs for any HTML site, Wix, Shopify and Next.js; SPA route tracking; optional HTTP declarations; Express and Web Request helpers.',
   },
   {
     title: 'An owner workspace',
@@ -56,9 +56,9 @@ export const nextFeatures = [
       'Benchmark browser and computer-use agents, measure false positives, and integrate authoritative WAF signals.',
   },
   {
-    title: 'A deployable admission adapter',
+    title: 'Native platform apps and log connectors',
     detail:
-      'Apply server-side admission to external host websites. The current embed only collects data and voluntary answers.',
+      'Add Wix and Shopify marketplace apps and CDN/log integrations. Current platform support uses custom-code snippets, not installed marketplace apps.',
   },
   {
     title: 'Multiple sites and teams',

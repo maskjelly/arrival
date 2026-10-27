@@ -2156,3 +2156,77 @@ body {
     transition: none !important;
   }
 }
+
+.install-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 14px;
+  margin: 20px 0;
+}
+.install-platforms button {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 13px;
+  border: 1px solid #e4bad0;
+  border-radius: 6px;
+  background: #fff;
+  color: #4a263a;
+  cursor: pointer;
+}
+.install-platforms button.selected {
+  background: #20131a;
+  color: #fff;
+  border-color: #20131a;
+}
+.install-steps {
+  padding-left: 22px;
+  color: #674153;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.install-steps li {
+  padding: 3px 0 5px 4px;
+}
+.install-verification {
+  margin: 20px 0;
+}
+.install-verification p {
+  font-size: 13px;
+  color: #563447;
+  line-height: 1.6;
+}
+.install-guide .code-block pre {
+  overflow: auto;
+  max-width: 100%;
+}
+.integration-main,
+.integration-grid > aside,
+.setup-heading > div {
+  min-width: 0;
+}
+.collector-mode select {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 800px) {
+  .integration-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .collector-mode {
+    align-items: stretch;
+    gap: 10px;
+  }
+  .setup-heading {
+    flex-wrap: wrap;
+  }
+}
+.integration-grid > aside > * {
+  min-width: 0;
+}
+@media (max-width: 800px) {
+  .integration-grid > aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

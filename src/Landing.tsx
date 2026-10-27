@@ -98,7 +98,7 @@ export default function Landing() {
               Get to know why.
             </h1>
             <p>
-              Ask AI visitors what brought them here.
+              Understand AI visits without slowing them down.
               <br className="desktop-break" /> Follow the task, the pages, and what happens next.
             </p>
             <div className="hero-actions">
@@ -284,7 +284,7 @@ export default function Landing() {
                 </p>
                 <div className="connection-tags">
                   <span>Browser script</span>
-                  <span>Express adapter</span>
+                  <span>Wix · Shopify · Next.js</span>
                   <span>HTTP API</span>
                 </div>
               </div>
@@ -307,8 +307,8 @@ export default function Landing() {
               <span className="step-tag">01 / Connect</span>
               <h3>Give visits a place to land.</h3>
               <p>
-                Add the browser tracker or report requests from your server. Start with the
-                protected demo to see the complete flow.
+                Add the browser tracker or report requests from your server. Start with the open
+                demo to see the complete flow.
               </p>
               <span className="step-icon">
                 <Code size={36} />
@@ -318,8 +318,8 @@ export default function Landing() {
               <span className="step-tag">02 / Ask</span>
               <h3>Let the visitor explain.</h3>
               <p>
-                Choose your questions. A browser agent sees a form; an HTTP client can use the
-                demo’s structured check-in API.
+                Choose your questions. Browser agents can open a small optional prompt; HTTP agents
+                can discover a structured reporting API.
               </p>
               <span className="step-icon">
                 <ListChecks size={36} />
@@ -339,8 +339,8 @@ export default function Landing() {
           </div>
           <p className="honesty-note">
             <span className="stitched-square" />
-            The embedded form is voluntary. Server-enforced admission is implemented on the demo
-            website.
+            Your website stays open. Questions are optional, the prompt never takes focus, and
+            collection failures do not block the task.
           </p>
         </section>
 
@@ -381,8 +381,9 @@ export default function Landing() {
             <article>
               <h3>Can I use it on my website?</h3>
               <p>
-                The tracker and server adapter are implemented. Remote sites need a reachable HTTPS
-                deployment. Enforcing admission on another site needs a server-side adapter.
+                Copy the snippet for Wix, Shopify, Next.js, or any website that accepts custom code.
+                Host Arrival on HTTPS for remote collection. HTTP-only crawler requests also need
+                server or CDN collection.
               </p>
             </article>
           </div>

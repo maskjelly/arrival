@@ -63,6 +63,7 @@ export const defaultQuestions: Question[] = [
 
 export class Store {
   db: DatabaseSync;
+  collectorOrigin?: string;
   constructor(path: string) {
     if (path !== ':memory:') {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -70,7 +71,7 @@ export class Store {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') chmodSync(path, 0o600);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
-      CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, origin TEXT NOT NULL, require_admission INTEGER NOT NULL DEFAULT 1, questions_version INTEGER NOT NULL, questions TEXT NOT NULL, ingest_hash TEXT);
+      CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, origin TEXT NOT NULL, require_admission INTEGER NOT NULL DEFAULT 0, questions_version INTEGER NOT NULL, questions TEXT NOT NULL, ingest_hash TEXT);
       CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), token_hash TEXT NOT NULL UNIQUE, external_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL, is_demo INTEGER NOT NULL DEFAULT 0, user_agent TEXT NOT NULL, ip TEXT NOT NULL, referrer TEXT NOT NULL, entry_path TEXT NOT NULL, agent_name TEXT NOT NULL, classification TEXT NOT NULL, evidence TEXT NOT NULL, environment TEXT NOT NULL DEFAULT '{}', answers TEXT NOT NULL DEFAULT '{}', questions TEXT NOT NULL, questions_version INTEGER NOT NULL, permissions TEXT NOT NULL DEFAULT '[]', UNIQUE(site_id, external_key));
       CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), created_at TEXT NOT NULL, type TEXT NOT NULL, path TEXT NOT NULL, method TEXT NOT NULL, status INTEGER, source TEXT NOT NULL, data TEXT NOT NULL, dedupe_key TEXT UNIQUE);
       CREATE INDEX IF NOT EXISTS events_session_time ON events(session_id, created_at);
@@ -100,6 +101,7 @@ export class Store {
       questionsVersion: Number(row.questions_version),
       questions: json(row.questions),
       hasIngestKey: !!row.ingest_hash,
+      ...(this.collectorOrigin ? { collectorOrigin: this.collectorOrigin } : {}),
     };
   }
   updateSite(update: {
@@ -311,25 +313,31 @@ export class Store {
     this.db.prepare("UPDATE sessions SET status='revoked' WHERE id=?").run(id);
     this.event(id, 'access_revoked', '/', {}, { source: 'owner action' });
   }
-  declare(id: string, answers: Visit['answers']) {
-    this.db.prepare('UPDATE sessions SET answers=? WHERE id=?').run(JSON.stringify(answers), id);
+  declare(id: string, answers: Visit['answers'], source = 'browser reported') {
+    this.db
+      .prepare("UPDATE sessions SET answers=?, status='observed', permissions='[]' WHERE id=?")
+      .run(JSON.stringify(answers), id);
     this.event(
       id,
       'purpose_declared',
       this.get(id)!.entryPath,
       { questionVersion: this.get(id)!.questionsVersion, enforced: false },
-      { method: 'POST', source: 'browser reported', status: 200 },
+      { method: 'POST', source, status: 200 },
     );
   }
-  environment(id: string, environment: Record<string, unknown>) {
+  environment(
+    id: string,
+    environment: Record<string, unknown>,
+    source: 'browser reported' | 'agent reported' = 'browser reported',
+  ) {
     const visit = this.get(id)!;
-    const evidence = visit.evidence.filter((e) => e.source !== 'browser reported');
+    const evidence = visit.evidence.filter((e) => e.source !== source);
     for (const [name, value] of Object.entries(environment))
       if (value !== undefined && value !== null)
         evidence.push({
           name,
           value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-          source: 'browser reported',
+          source,
         });
     const automation =
       environment.webdriver === true || /HeadlessChrome/i.test(String(environment.userAgent ?? ''));

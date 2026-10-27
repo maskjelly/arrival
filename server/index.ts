@@ -14,6 +14,7 @@ const { app, store } = createApp({
   databasePath: process.env.DATABASE_PATH,
   adminPassword: process.env.ADMIN_PASSWORD,
   trustedProxy: process.env.TRUST_PROXY,
+  publicOrigin: process.env.PUBLIC_URL,
 });
 const server = createServer(app);
 let vite: import('vite').ViteDevServer | undefined;

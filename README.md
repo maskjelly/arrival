@@ -1,10 +1,11 @@
 # Arrival
 
-Agent analytics with customizable check-in and visit timelines. Ask visitors what brought them to your website, then connect their answers to recorded activity.
+Agent observability without getting in the way. Collect visit activity and optional task summaries while your website stays open.
 
 - Configure questions and inspect declared objectives alongside request/browser evidence.
 - Collect visits with a browser embed or server adapter.
-- Try server-enforced admission, scoped access, and revocation on the demo website.
+- Paste a snippet into any HTML site, Wix, Shopify or Next.js; no client package or private key.
+- Offer a small nonmodal prompt and a structured reporting protocol for HTTP agents.
 - Keep records in SQLite and export JSON or CSV.
 
 ## Run
@@ -17,7 +18,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open the [landing page](http://127.0.0.1:3000), [workspace](http://127.0.0.1:3000/app), or [protected demo](http://127.0.0.1:3000/lab). Use **Run a demo agent** to capture an actual, labeled test visit. No model API key is needed.
+Open the [landing page](http://127.0.0.1:3000), [workspace](http://127.0.0.1:3000/app), or [open demo](http://127.0.0.1:3000/lab). Use **Run a demo agent** to capture an actual, labeled test visit. No model API key is needed.
 
 ## Stack
 
@@ -32,6 +33,6 @@ npm run check
 
 ## Status
 
-Single-site, single-owner MVP. Agent identities are unverified; answers are self-reported. The embedded questionnaire is voluntary; enforced admission currently covers the demo site. Public-interface binding requires an owner password and should use HTTPS.
+Single-site, single-owner MVP. Questions are optional and collection never blocks your website. Agent identities are unverified; answers are self-reported. Automatic HTTP-only request logging requires a server/log integration; a browser snippet alone cannot see it. A reachable HTTPS collector is needed for external sites.
 
-[Setup and operation](docs/development.md) · [Architecture](docs/architecture.md) · [Built and next](docs/build-status.md)
+[Install on your website](docs/integrations.md) · [Setup and operation](docs/development.md) · [Architecture](docs/architecture.md) · [Built and next](docs/build-status.md)

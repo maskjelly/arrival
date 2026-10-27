@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Evidence, Question, Site, Visit, VisitEvent } from '../src/types.ts';
+import type { Evidence, Question, Site, Visit, VisitEvent, NetworkContext } from '../src/types.ts';
 
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const credential = () => randomBytes(32).toString('base64url');
@@ -78,6 +78,13 @@ export class Store {
       CREATE INDEX IF NOT EXISTS sessions_created ON sessions(created_at);
       CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL);
     `);
+    if (
+      !this.db
+        .prepare('PRAGMA table_info(sessions)')
+        .all()
+        .some((column) => column.name === 'network')
+    )
+      this.db.exec("ALTER TABLE sessions ADD COLUMN network TEXT NOT NULL DEFAULT '{}'");
     if (!this.db.prepare('SELECT id FROM sites LIMIT 1').get())
       this.db
         .prepare(
@@ -201,6 +208,8 @@ export class Store {
       isDemo: !!row.is_demo,
       userAgent: String(row.user_agent),
       ip: String(row.ip),
+      network:
+        row.network && String(row.network) !== '{}' ? json<NetworkContext>(row.network) : undefined,
       referrer: String(row.referrer),
       entryPath: String(row.entry_path),
       agentName:
@@ -221,6 +230,31 @@ export class Store {
   get(id: string) {
     const row = this.db.prepare('SELECT * FROM sessions WHERE id=?').get(id);
     return row ? this.map(row) : undefined;
+  }
+  network(id: string, context: NetworkContext) {
+    const row = this.db.prepare('SELECT network FROM sessions WHERE id=?').get(id);
+    if (!row) return;
+    const previous = json<Partial<NetworkContext>>(row.network);
+    const changed = !!previous.ip && previous.ip !== context.ip;
+    const history = [...(previous.history ?? [])];
+    if (!previous.ip || changed)
+      history.push({ ip: context.ip, observedAt: context.observedAt, source: context.ipSource });
+    this.db
+      .prepare('UPDATE sessions SET network=? WHERE id=?')
+      .run(JSON.stringify({ ...context, history: history.slice(-8) }), id);
+    if (changed)
+      this.event(
+        id,
+        'network_changed',
+        '/',
+        { previousIp: previous.ip, ip: context.ip },
+        {
+          source:
+            context.ipSource === 'integration reported'
+              ? 'integration reported'
+              : 'server observed',
+        },
+      );
   }
   byToken(token: string) {
     if (!token) return undefined;

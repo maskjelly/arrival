@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 import { Store, credential, hash } from './store.ts';
 import { cleanPath, cleanReferrer, identify } from './signals.ts';
+import { NetworkEnricher } from './geo.ts';
+import { addressInfo, captureNetwork, reportedNetwork } from './network.ts';
 import { catalog, gatePage, labPage, checkInPage } from './pages.ts';
 import type { Question, Visit } from '../src/types.ts';
 
@@ -56,6 +58,17 @@ const environmentSchema = z
     touchPoints: z.number().min(0).max(100).optional(),
     cookiesEnabled: z.boolean().optional(),
     colorScheme: z.enum(['light', 'dark']).optional(),
+    pixelRatio: z.number().min(0).max(20).optional(),
+    colorDepth: z.number().min(0).max(128).optional(),
+    browserBrands: z.array(text(100)).max(10).optional(),
+    mobile: z.boolean().optional(),
+    connectionType: text(40).optional(),
+    downlinkMbps: z.number().min(0).max(100000).optional(),
+    roundTripMs: z.number().min(0).max(600000).optional(),
+    saveData: z.boolean().optional(),
+    doNotTrack: text(20).optional(),
+    globalPrivacyControl: z.boolean().optional(),
+    reducedMotion: z.boolean().optional(),
   })
   .strict();
 const eventSchema = z
@@ -144,9 +157,32 @@ export function createApp(
     adminPassword?: string;
     trustedProxy?: string;
     publicOrigin?: string;
+    networkService?: NetworkEnricher;
   } = {},
 ) {
   const store = new Store(options.databasePath ?? resolve('.data/arrival.sqlite'));
+  const network = options.networkService ?? new NetworkEnricher();
+  const refreshNetworkArchive = () => {
+    let updated = 0;
+    for (const visit of store.list('1970')) {
+      const context = visit.network;
+      store.network(
+        visit.id,
+        context
+          ? {
+              ...context,
+              location: undefined,
+              asn: undefined,
+              hosting: undefined,
+              ...network.lookup(context.ip),
+            }
+          : reportedNetwork(visit.ip, network.lookup, {}, true),
+      );
+      updated++;
+    }
+    return updated;
+  };
+  if (network.status().enabled) refreshNetworkArchive();
   if (options.publicOrigin) {
     const url = new URL(options.publicOrigin);
     if (!['http:', 'https:'].includes(url.protocol))
@@ -256,6 +292,19 @@ export function createApp(
   });
   app.use('/api/admin', freshRequest, owner);
   app.get('/api/admin/site', (_req, res) => res.json(store.site()));
+  app.get('/api/admin/network', (_req, res) => res.json(network.status()));
+  app.post('/api/admin/network/update', rateLimit('geo-update', 3), (_req, res) => {
+    void network
+      .update()
+      .then(() => {
+        if (network.status().enabled) refreshNetworkArchive();
+      })
+      .catch(() => {});
+    res.status(202).json(network.status());
+  });
+  app.post('/api/admin/network/backfill', (_req, res) =>
+    res.json({ updated: refreshNetworkArchive(), status: network.status() }),
+  );
   app.get('/api/admin/installation', (_req, res) => {
     const browser = store.db
       .prepare(
@@ -323,6 +372,28 @@ export function createApp(
         'SELECT agent_name AS name, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY agent_name ORDER BY count DESC LIMIT 5',
       )
       .all(since);
+    const networkCounts = store.db
+      .prepare(
+        `SELECT COUNT(DISTINCT json_extract(network,'$.location.countryCode')) AS countryCount,
+      SUM(CASE WHEN json_extract(network,'$.location.countryCode') IS NOT NULL THEN 1 ELSE 0 END) AS located,
+      SUM(CASE WHEN json_extract(network,'$.asn.number') IS NOT NULL THEN 1 ELSE 0 END) AS asnResolved,
+      SUM(CASE WHEN json_extract(network,'$.scope')='public' THEN 1 ELSE 0 END) AS publicAddresses
+      FROM sessions WHERE created_at>=?`,
+      )
+      .get(since)!;
+    const countries = store.db
+      .prepare(
+        `SELECT json_extract(network,'$.location.countryCode') AS code,
+      json_extract(network,'$.location.country') AS name, COUNT(*) AS count FROM sessions
+      WHERE created_at>=? AND json_extract(network,'$.location.countryCode') IS NOT NULL GROUP BY code ORDER BY count DESC LIMIT 6`,
+      )
+      .all(since);
+    const providers = store.db
+      .prepare(
+        `SELECT json_extract(network,'$.asn.organization') AS name, COUNT(*) AS count FROM sessions
+      WHERE created_at>=? AND json_extract(network,'$.asn.organization') IS NOT NULL GROUP BY name ORDER BY count DESC LIMIT 6`,
+      )
+      .all(since);
     res.json({
       site: store.site(),
       sessions,
@@ -338,6 +409,16 @@ export function createApp(
       chart,
       pages,
       sources,
+      network: {
+        countryCount: Number(networkCounts.countryCount ?? 0),
+        located: Number(networkCounts.located ?? 0),
+        asnResolved: Number(networkCounts.asnResolved ?? 0),
+        publicAddresses: Number(networkCounts.publicAddresses ?? 0),
+        total: Number(stat.visits),
+        countries,
+        providers,
+        status: network.status(),
+      },
       serverTime: new Date().toISOString(),
     });
   });
@@ -380,6 +461,16 @@ export function createApp(
           'Page views',
           'Events',
           'Controlled demo',
+          'Arrival IP',
+          'Latest IP',
+          'IP source',
+          'Country',
+          'Region',
+          'City',
+          'ASN',
+          'Network operator',
+          'Hosting signal (inferred)',
+          'IP data source',
         ],
         ...sessions.map((v) => [
           v.id,
@@ -392,6 +483,18 @@ export function createApp(
           v.pageCount,
           v.eventCount,
           v.isDemo,
+          v.ip,
+          v.network?.ip,
+          v.network?.ipSource,
+          v.network?.location?.country,
+          v.network?.location?.region,
+          v.network?.location?.city,
+          v.network?.asn?.number,
+          v.network?.asn?.organization,
+          v.network?.hosting?.provider,
+          v.network?.enrichment.source
+            ? `${v.network.enrichment.source} https://db-ip.com | CC BY 4.0`
+            : '',
         ]),
       ];
       res
@@ -404,6 +507,7 @@ export function createApp(
       exportedAt: new Date().toISOString(),
       note: 'Latest 300 visits. Client identities and task answers are unverified unless separately documented. No verification service is connected.',
       site: store.site(),
+      networkAttribution: network.status().provider,
       visits: sessions.map((visit) => ({ ...visit, events: store.events(visit.id) })),
     });
   });
@@ -572,7 +676,7 @@ export function createApp(
       (store.site().requireAdmission && visit.status === 'observed')
     ) {
       const userAgent = (req.get('user-agent') ?? '').slice(0, 1000),
-        ip = req.ip ?? '';
+        ip = addressInfo(req.ip ?? '').ip;
       const created = store.createSession({
         source: 'gateway',
         userAgent,
@@ -593,6 +697,7 @@ export function createApp(
         { method: req.method },
       );
     }
+    store.network(visit.id, captureNetwork(req, network.lookup));
     res.locals.visit = visit;
     res.locals.arrival = {
       token,
@@ -767,7 +872,7 @@ export function createApp(
         visit.status === 'revoked'
       ) {
         const ua = (req.get('user-agent') ?? '').slice(0, 1000),
-          ip = req.ip ?? '';
+          ip = addressInfo(req.ip ?? '').ip;
         const created = store.createSession({
           source: channel,
           isDemo: ua.startsWith('Arrival-DemoAgent/'),
@@ -780,6 +885,7 @@ export function createApp(
         visit = created.visit;
         token = created.token;
       }
+      store.network(visit.id, captureNetwork(req, network.lookup));
       if (body.environment) store.environment(visit.id, body.environment, provenance);
       store.event(
         visit.id,
@@ -856,6 +962,12 @@ export function createApp(
           ip: text(100).optional(),
           referrer: text(700).optional(),
           durationMs: z.number().min(0).max(3600000).optional(),
+          headers: z
+            .record(z.string().max(80), text(700))
+            .refine((v) => Object.keys(v).length <= 30)
+            .optional(),
+          httpVersion: text(12).optional(),
+          scheme: z.enum(['http', 'https']).optional(),
         })
         .strict(),
       req.body,
@@ -875,11 +987,20 @@ export function createApp(
         source: 'server',
         externalKey: `server:${body.sessionId}`,
         userAgent: body.userAgent,
-        ip: body.ip ?? '',
+        ip: addressInfo(body.ip ?? '').ip,
         referrer: cleanReferrer(body.referrer ?? ''),
         entryPath: cleanPath(body.path),
-        ...identify(body.userAgent, body.ip ?? '', 'integration reported'),
+        ...identify(body.userAgent, addressInfo(body.ip ?? '').ip, 'integration reported'),
       }).visit;
+    store.network(
+      visit.id,
+      reportedNetwork(body.ip ?? '', network.lookup, {
+        method: body.method,
+        httpVersion: body.httpVersion,
+        scheme: body.scheme,
+        headers: body.headers,
+      }),
+    );
     const inserted = store.event(
       visit.id,
       'request',

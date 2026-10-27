@@ -38,6 +38,33 @@
     touchPoints: navigator.maxTouchPoints || 0,
     cookiesEnabled: navigator.cookieEnabled,
     colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    pixelRatio: devicePixelRatio || 1,
+    colorDepth: screen.colorDepth || 0,
+    ...(navigator.userAgentData
+      ? {
+          browserBrands: navigator.userAgentData.brands
+            .slice(0, 10)
+            .map((b) => `${b.brand} ${b.version}`),
+          mobile: !!navigator.userAgentData.mobile,
+        }
+      : {}),
+    ...(navigator.connection
+      ? {
+          connectionType: String(navigator.connection.effectiveType || '').slice(0, 40),
+          ...(Number.isFinite(navigator.connection.downlink)
+            ? { downlinkMbps: navigator.connection.downlink }
+            : {}),
+          ...(Number.isFinite(navigator.connection.rtt)
+            ? { roundTripMs: navigator.connection.rtt }
+            : {}),
+          saveData: !!navigator.connection.saveData,
+        }
+      : {}),
+    ...(navigator.doNotTrack ? { doNotTrack: String(navigator.doNotTrack).slice(0, 20) } : {}),
+    ...(typeof navigator.globalPrivacyControl === 'boolean'
+      ? { globalPrivacyControl: navigator.globalPrivacyControl }
+      : {}),
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
   const endpoint = '/api/collect/' + encodeURIComponent(siteId || '');
   const send = async (payload, path) => {

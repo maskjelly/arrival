@@ -55,6 +55,25 @@ export function arrivalAnalytics(options: {
           ip: req.ip ?? '',
           referrer: (req.get('referer') ?? '').slice(0, 700),
           durationMs: Math.round(performance.now() - started),
+          httpVersion: req.httpVersion,
+          scheme: req.protocol,
+          headers: Object.fromEntries(
+            [
+              'accept',
+              'accept-language',
+              'accept-encoding',
+              'sec-ch-ua',
+              'sec-ch-ua-mobile',
+              'sec-ch-ua-platform',
+              'sec-fetch-site',
+              'sec-fetch-mode',
+              'sec-fetch-dest',
+              'dnt',
+              'sec-gpc',
+              'purpose',
+              'sec-purpose',
+            ].flatMap((name) => (req.get(name) ? [[name, req.get(name)!.slice(0, 700)]] : [])),
+          ),
         };
         // Reporting failure never changes the host request's response.
         void fetch(target, {

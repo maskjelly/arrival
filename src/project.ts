@@ -3,6 +3,10 @@ export const stack = [
   { name: 'Vite 8', role: 'Local development and production frontend builds.' },
   { name: 'Node.js + Express 5', role: 'Check-in, permissions, collection, and owner APIs.' },
   { name: 'SQLite', role: 'Persistent visits, versioned questions, answers, and event history.' },
+  {
+    name: 'DB-IP Lite + MaxMind reader',
+    role: 'Offline approximate location and ASN ownership for public IPv4 and IPv6 addresses.',
+  },
   { name: 'Zod 4', role: 'Server validation for answers, configuration, and telemetry.' },
   {
     name: 'Native CSS + IBM Plex',
@@ -21,6 +25,11 @@ export const builtFeatures = [
     title: 'A visit record with context',
     detail:
       'Declared objectives, discovery sources, browser hints, request metadata, and an event timeline.',
+  },
+  {
+    title: 'Connection origins and network ownership',
+    detail:
+      'Exit IP, approximate city/country, ASN organization, inferred hosting network, capture provenance and address changes. Local databases keep visitor IPs off third-party lookup APIs.',
   },
   {
     title: 'An open demonstration site',

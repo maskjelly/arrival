@@ -4,6 +4,7 @@ Agent observability without getting in the way. Collect visit activity and optio
 
 - Configure questions and inspect declared objectives alongside request/browser evidence.
 - Collect visits with a browser embed or server adapter.
+- Inspect exit IPs, approximate locations, ASN ownership and inferred hosting networks with local lookups.
 - Paste a snippet into any HTML site, Wix, Shopify or Next.js; no client package or private key.
 - Offer a small nonmodal prompt and a structured reporting protocol for HTTP agents.
 - Keep records in SQLite and export JSON or CSV.
@@ -20,9 +21,11 @@ npm run dev
 
 Open the [landing page](http://127.0.0.1:3000), [workspace](http://127.0.0.1:3000/app), or [open demo](http://127.0.0.1:3000/lab). Use **Run a demo agent** to capture an actual, labeled test visit. No model API key is needed.
 
+Enable location and ASN lookup in **Connect a website**, or run `npm run geo:update` before starting. Visitor IPs stay local during lookup. [Network data and accuracy](docs/network-data.md).
+
 ## Stack
 
-React, TypeScript, Vite, Express, SQLite, and Zod. Native CSS with self-hosted fonts.
+React, TypeScript, Vite, Express, SQLite, Zod, and local DB-IP Lite databases. Native CSS with self-hosted fonts.
 
 ## Check
 

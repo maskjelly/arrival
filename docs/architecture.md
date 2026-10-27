@@ -37,6 +37,12 @@ A read-only client can ignore check-in and continue its task. Tools that cannot 
 
 `sdk/arrival.ts` reports Express responses after `finish` and can create its own opaque session cookie. `sdk/web.ts` accepts a Web Request and works with a host's background `waitUntil` mechanism. If the host cannot observe the final response status, that field is omitted and stored as unknown. Both helpers contain reporting and error-hook failures. There is no durable queue. Browser and host-server visit records are currently separate; automatic cross-channel merging is not implemented.
 
+## Network enrichment
+
+`server/network.ts` normalizes IP addresses, records connection provenance and filters request headers through an allowlist. `server/geo.ts` resolves public addresses against optional local DB-IP Lite City/ASN MMDB databases using `maxmind`, with a bounded lookup cache. Private/reserved addresses skip enrichment. Hosting hints are conservative organization-name inferences. Neither network ownership nor city estimates verify an agent identity or actual host behind a proxy.
+
+The owner can install/update databases asynchronously. Lookups do not issue per-visitor outbound requests. Dataset absence, misses and update failures leave website access available. SQLite stores enrichment and up to eight address changes per visit. Startup and dashboard updates reprocess the latest 300 visits; legacy addresses are labeled as stored evidence, not new network observations. See [network data](network-data.md) for fields, licensing and proxy configuration.
+
 ## Instrumented demonstration
 
 `/lab` records actual page requests and serves content immediately by default. It exposes optional questions through HTML and JSON, preserves a visit cookie, and records searches, downloads and a local shortlist action. The public temporary testing facade maps its homepage directly to this demo and keeps owner routes private.

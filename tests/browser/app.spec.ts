@@ -298,7 +298,7 @@ test('an external website collects voluntary answers and annotated activity thro
 test('workspace views support direct links, keyboard navigation and accessible contrast', async ({
   page,
 }) => {
-  for (const view of ['overview', 'sessions', 'questions', 'integration', 'project']) {
+  for (const view of ['overview', 'sessions', 'origins', 'questions', 'integration', 'project']) {
     await page.goto('/app?view=' + view);
     await expect(page.locator('.page-heading h1')).toBeVisible();
     const results = await new AxeBuilder({ page })
@@ -345,7 +345,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
   await page.locator('.mobile-visit-card').first().click();
   const drawer = page.getByRole('dialog', { name: 'Visit details' });
   await expect(drawer).toBeVisible();
-  for (const tab of ['Task & answers', 'Activity', 'Signals', 'Raw data']) {
+  for (const tab of ['Task & answers', 'Network', 'Activity', 'Signals', 'Raw data']) {
     await drawer.getByRole('button', { name: tab, exact: tab !== 'Activity' }).click();
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
@@ -354,4 +354,117 @@ test('workspace views support direct links, keyboard navigation and accessible c
   }
   await page.keyboard.press('Escape');
   await expect(drawer).not.toBeVisible();
+});
+
+test('connection origins expose capture provenance and searchable network details on desktop and phone', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/app?view=origins');
+  await expect(page.getByRole('heading', { name: 'Where visits connect from' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Search connection evidence' }).fill('127.0.0.1');
+  const visit = page.getByRole('button', { name: /Inspect network for/ }).first();
+  await expect(visit).toBeVisible();
+  await visit.click();
+  const drawer = page.getByRole('dialog', { name: 'Visit details' });
+  await drawer.getByRole('button', { name: 'Network', exact: true }).click();
+  await expect(drawer.locator('.network-address-card')).toContainText('127.0.0.1');
+  await expect(drawer.getByText('Capture source', { exact: true })).toBeVisible();
+  await expect(drawer.getByText('Proxy / VPN', { exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: 'Close visit details' }).click();
+  mkdirSync('.data/screenshots', { recursive: true });
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.screenshot({ path: '.data/screenshots/origins-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.data/screenshots/origins-mobile.png', fullPage: true });
+  await visit.click();
+  await drawer.getByRole('button', { name: 'Network', exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '.data/screenshots/network-mobile.png', fullPage: false });
+  await drawer.getByRole('button', { name: 'Close visit details' }).click();
+  await page.getByRole('button', { name: 'Manage IP data' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Location & network intelligence' }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('populated origins and long IPv6 connection details stay readable and accessible', async ({
+  page,
+}) => {
+  // Browser-only fixture: never creates synthetic traffic in the application database.
+  const ip = '2606:4700:4700:1234:5678:9abc:def0:1234';
+  await page.goto('/app');
+  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  expect((await page.request.post('/api/admin/run-demo')).ok()).toBe(true);
+  await page.route('**/api/admin/overview*', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    if (!response.ok() || !data.sessions?.length) {
+      await route.fulfill({ response });
+      return;
+    }
+    data.network = {
+      ...data.network,
+      countryCount: 1,
+      located: 1,
+      asnResolved: 1,
+      publicAddresses: 1,
+      countries: [{ code: 'US', name: 'United States', count: 1 }],
+      providers: [{ name: 'Cloudflare, Inc.', count: 1 }],
+    };
+    const v = data.sessions[0];
+    const context = {
+      ip,
+      version: 6,
+      scope: 'public',
+      ipSource: 'integration reported',
+      observedAt: v.createdAt,
+      request: { httpVersion: '2.0', scheme: 'https', headers: { 'accept-language': 'en-US' } },
+      enrichment: { status: 'enriched', source: 'UI test fixture' },
+      location: {
+        countryCode: 'US',
+        country: 'United States',
+        city: 'San Francisco',
+        approximate: true,
+      },
+      asn: { number: 13335, organization: 'Cloudflare, Inc.' },
+      hosting: {
+        provider: 'Cloudflare network',
+        kind: 'cloud / hosting / CDN',
+        confidence: 'inferred',
+      },
+    };
+    data.sessions = [{ ...v, ip, agentName: 'IPv6 interface fixture', network: context }];
+    await route.fulfill({ response, json: data });
+    await page.route('**/api/admin/sessions/' + v.id, async (detailRoute) => {
+      const detailResponse = await detailRoute.fetch();
+      const detail = await detailResponse.json();
+      await detailRoute.fulfill({
+        response: detailResponse,
+        json: { ...detail, visit: data.sessions[0] },
+      });
+    });
+  });
+  await page.goto('/app?view=origins');
+  const country = page.getByRole('button', { name: /United States/ });
+  await expect(country).toBeVisible();
+  await country.click();
+  await expect(country).toHaveAttribute('aria-pressed', 'true');
+  let results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(results.violations).toEqual([]);
+  await page.getByRole('button', { name: 'Inspect network for IPv6 interface fixture' }).click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer.locator('.network-address-card')).toContainText(ip);
+  await expect(drawer).toContainText('Cloudflare network · inferred');
+  await expect(drawer).toContainText('HTTP/2.0 at host server');
+  await page.setViewportSize({ width: 390, height: 844 });
+  results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(results.violations).toEqual([]);
+  expect(await drawer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import express from 'express';
 import { createApp } from './app.ts';
+import { NetworkEnricher } from './geo.ts';
 
 if (process.argv.includes('--production')) process.env.NODE_ENV = 'production';
 
@@ -10,11 +11,17 @@ const port = Number(process.env.PORT ?? 3000),
   host = process.env.HOST ?? '127.0.0.1';
 if (!['127.0.0.1', 'localhost', '::1'].includes(host) && !process.env.ADMIN_PASSWORD)
   throw new Error('Set ADMIN_PASSWORD before binding a public interface.');
+const networkService = new NetworkEnricher({
+  cityPath: process.env.GEOIP_CITY_PATH,
+  asnPath: process.env.GEOIP_ASN_PATH,
+});
+await networkService.load();
 const { app, store } = createApp({
   databasePath: process.env.DATABASE_PATH,
   adminPassword: process.env.ADMIN_PASSWORD,
   trustedProxy: process.env.TRUST_PROXY,
   publicOrigin: process.env.PUBLIC_URL,
+  networkService,
 });
 const server = createServer(app);
 let vite: import('vite').ViteDevServer | undefined;

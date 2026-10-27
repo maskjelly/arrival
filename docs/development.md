@@ -25,6 +25,7 @@ The app stores records in `.data/arrival.sqlite`. Restarting preserves visits, q
 - Authenticated ingestion and Express/Web Request reporting helpers for clients that do not execute JavaScript.
 - Platform-specific snippet setup and real origin-based installation verification.
 - JSON export with answers, question snapshots, evidence and events; CSV summary export.
+- Origins view and per-visit Network tab: exit IP, approximate location, ASN organization, inferred hosting network, capture provenance and bounded address history. Free databases install from the workspace or `npm run geo:update`.
 
 ## Try it
 
@@ -50,7 +51,7 @@ Request headers are client-controlled claims. Browser properties and task answer
 
 Collected browser context includes user-agent, automation flag, language, timezone, platform, viewport/screen, available hardware hints, touch support and cookie capability. Request queries and referrer queries are stripped. Input contents and page text are not captured. A user's voluntarily supplied search query and questionnaire answers are recorded.
 
-The collector can see a proxy or browser host's address rather than the end user's. It does not collect TLS fingerprints, call a geolocation service, infer private prompts or guarantee detection of computer-use agents. Browser collection requires JavaScript; server reporting is best-effort and can lose events during an outage.
+The collector can see a proxy or browser host's address rather than the end user's. Location and ASN are looked up locally in optional DB-IP Lite databases; individual visitor IPs are not sent to a lookup API. It does not collect TLS fingerprints, infer private prompts or guarantee detection of computer-use agents. Browser collection requires JavaScript; server reporting is best-effort and can lose events during an outage. See [network data, trust configuration and accuracy](network-data.md).
 
 ## Checks
 
@@ -72,7 +73,7 @@ HOST=0.0.0.0 ADMIN_PASSWORD='choose-a-long-private-password' npm start
 
 Set the password through your deployment's private environment, not client code. Public-interface binding is refused without it. Use HTTPS. If a local reverse proxy terminates TLS, configure `TRUST_PROXY=loopback`; for other topologies, configure only the actual trusted proxy addresses. Without trusted proxy configuration, forwarded headers are not accepted as authoritative.
 
-Configuration: `PORT` (default 3000), `HOST` (default 127.0.0.1), `DATABASE_PATH`, `ADMIN_PASSWORD`, `TRUST_PROXY`, `PUBLIC_URL` (public collector origin used in snippets and manifests).
+Configuration: `PORT` (default 3000), `HOST` (default 127.0.0.1), `DATABASE_PATH`, `ADMIN_PASSWORD`, `TRUST_PROXY`, `PUBLIC_URL` (public collector origin used in snippets and manifests), `GEOIP_CITY_PATH` and `GEOIP_ASN_PATH` (local DB-IP Lite MMDB files).
 
 This MVP has one site and one owner. SQLite writes are synchronous, there is no durable ingestion queue or automatic retention job, and dashboard/export queries currently return the latest 300 visits; a visit timeline returns at most 1,500 events. The all-time chart displays the latest seven days. Records beyond display limits remain in SQLite. It is not a production multi-tenant service.
 

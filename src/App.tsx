@@ -30,6 +30,13 @@ import {
 } from '@phosphor-icons/react';
 import BuildStatus from './BuildStatus.tsx';
 import InstallGuide from './InstallGuide.tsx';
+import {
+  NetworkBadge,
+  NetworkDetails,
+  NetworkSetup,
+  OriginStrip,
+  OriginsPage,
+} from './Network.tsx';
 import type { Overview, Question, Site, Visit, VisitEvent } from './types.ts';
 
 class ApiError extends Error {
@@ -94,6 +101,7 @@ const eventName = (value: string) =>
     scroll: 'Page scrolled',
     visibility: 'Visibility changed',
     not_found: 'Page not found',
+    network_changed: 'Connection address changed',
   })[value] || value;
 const statusName = (value: string) =>
   ({
@@ -103,7 +111,7 @@ const statusName = (value: string) =>
     revoked: 'Revoked',
     expired: 'Expired',
   })[value] || value;
-type View = 'overview' | 'sessions' | 'questions' | 'integration' | 'project';
+type View = 'overview' | 'sessions' | 'origins' | 'questions' | 'integration' | 'project';
 
 function Brand({ light = false }: { light?: boolean }) {
   return (
@@ -157,7 +165,9 @@ export default function App() {
   const readView = () => {
     const value = new URLSearchParams(location.search).get('view');
     return (
-      ['overview', 'sessions', 'questions', 'integration', 'project'].includes(value ?? '')
+      ['overview', 'sessions', 'origins', 'questions', 'integration', 'project'].includes(
+        value ?? '',
+      )
         ? value
         : 'overview'
     ) as View;
@@ -354,6 +364,7 @@ export default function App() {
   const views: { id: View; name: string; icon: typeof Path }[] = [
     { id: 'overview', name: 'Overview', icon: ChartLineUp },
     { id: 'sessions', name: 'Visits', icon: Path },
+    { id: 'origins', name: 'Origins', icon: Globe },
     { id: 'questions', name: 'Questions', icon: ListChecks },
     { id: 'integration', name: 'Connect a website', icon: Code },
     { id: 'project', name: 'Built & next', icon: ListChecks },
@@ -525,6 +536,7 @@ export default function App() {
                   range={range}
                   connectSite={() => setView('integration')}
                   editQuestions={() => setView('questions')}
+                  openOrigins={() => setView('origins')}
                 />
               ) : (
                 <VisitsPage
@@ -535,6 +547,15 @@ export default function App() {
                 />
               )}
             </>
+          )}
+          {view === 'origins' && data.network && (
+            <OriginsPage
+              data={data}
+              selectVisit={setSelected}
+              setup={() => setView('integration')}
+              range={range}
+              onRangeChange={setRange}
+            />
           )}
           {view === 'questions' && (
             <QuestionsPage
@@ -570,7 +591,18 @@ export default function App() {
             </>
           )}
           <footer className="app-footer">
-            <span>Refreshes every 5 seconds</span>
+            <span>
+              Refreshes every 5 seconds
+              {data.network?.status.enabled && (
+                <>
+                  {' '}
+                  · IP data by{' '}
+                  <a href="https://db-ip.com" target="_blank" rel="noreferrer">
+                    DB-IP
+                  </a>
+                </>
+              )}
+            </span>
             <span>
               Last synced{' '}
               {new Date(data.serverTime).toLocaleTimeString('en-GB', {
@@ -590,6 +622,7 @@ export default function App() {
       {selected && (
         <VisitDrawer
           id={selected}
+          initialTab={view === 'origins' ? 'network' : 'answers'}
           close={() => setSelected(undefined)}
           reload={reload}
           copy={copy}
@@ -608,7 +641,9 @@ function OverviewPage({
   range,
   connectSite,
   editQuestions,
+  openOrigins,
 }: {
+  openOrigins: () => void;
   connectSite: () => void;
   editQuestions: () => void;
   data: Overview;
@@ -714,6 +749,7 @@ function OverviewPage({
           </div>
         </section>
       </div>
+      {data.network && <OriginStrip network={data.network} open={openOrigins} />}
       <section className="panel visits-panel">
         <div className="panel-heading">
           <div>
@@ -945,6 +981,7 @@ function VisitTable({
             <tr>
               <th>Visitor</th>
               <th>Declared objective</th>
+              <th>Connection origin</th>
               <th>Status</th>
               <th>Activity</th>
               <th>Arrived</th>
@@ -969,6 +1006,9 @@ function VisitTable({
                   <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
                     {visit.objective || 'No purpose declared'}
                   </p>
+                </td>
+                <td>
+                  <NetworkBadge visit={visit} />
                 </td>
                 <td>
                   <Status visit={visit} />
@@ -1013,6 +1053,9 @@ function VisitTable({
               <span className={`mobile-visit-objective ${visit.objective ? '' : 'muted'}`}>
                 {visit.objective || 'No purpose declared'}
               </span>
+              <span className="mobile-visit-network">
+                <NetworkBadge visit={visit} />
+              </span>
               <span className="mobile-visit-meta">
                 <span>
                   {visit.pageCount} pages · {visit.eventCount} events
@@ -1046,7 +1089,7 @@ function VisitsPage({
       data.sessions.filter(
         (v) =>
           (!search ||
-            `${v.agentName} ${v.objective} ${v.id} ${v.entryPath}`
+            `${v.agentName} ${v.objective} ${v.id} ${v.entryPath} ${v.ip} ${v.network?.ip ?? ''} ${v.network?.location?.country ?? ''} ${v.network?.location?.countryCode ?? ''} ${v.network?.location?.city ?? ''} ${v.network?.asn?.organization ?? ''} ${v.network?.asn?.number ?? ''}`
               .toLowerCase()
               .includes(search.toLowerCase())) &&
           (status === 'all' || v.status === status) &&
@@ -1063,7 +1106,7 @@ function VisitsPage({
           <MagnifyingGlass size={18} />
           <input
             aria-label="Search visits"
-            placeholder="Search visitors, objectives, or IDs…"
+            placeholder="Search an agent, task, IP, city, or network…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1445,6 +1488,7 @@ function IntegrationPage({
             </form>
           </section>
           <InstallGuide site={site} copy={copy} />
+          <NetworkSetup />
           <details className="panel setup-panel server-setup">
             <summary>
               <Key size={18} /> Add server-side collection <span>For HTTP-only agents</span>
@@ -1591,18 +1635,20 @@ export const config = {
 
 function VisitDrawer({
   id,
+  initialTab,
   close,
   reload,
   copy,
 }: {
   id: string;
+  initialTab: string;
   close: () => void;
   reload: () => Promise<Overview>;
   copy: (value: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [detail, setDetail] = useState<{ visit: Visit; events: VisitEvent[] }>();
-  const [tab, setTab] = useState('answers'),
+  const [tab, setTab] = useState(initialTab),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
@@ -1610,9 +1656,16 @@ function VisitDrawer({
   }, [id]);
   useEffect(() => {
     void load().catch((err) => setError(err.message));
-    dialog.current?.showModal();
+    const previousFocus = document.activeElement;
+    const element = dialog.current;
+    element?.showModal();
     const interval = setInterval(() => void load().catch(() => {}), 5000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      element?.close();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
+        previousFocus.focus({ preventScroll: true });
+    };
   }, [load]);
   const visit = detail?.visit;
   return (
@@ -1684,6 +1737,7 @@ function VisitDrawer({
             <div className="drawer-tabs" role="group" aria-label="Visit detail sections">
               {[
                 ['answers', 'Task & answers'],
+                ['network', 'Network'],
                 ['activity', 'Activity'],
                 ['signals', 'Signals'],
                 ['raw', 'Raw data'],
@@ -1763,6 +1817,7 @@ function VisitDrawer({
                   </div>
                 </>
               )}
+              {tab === 'network' && <NetworkDetails visit={visit} copy={copy} />}
               {tab === 'activity' && (
                 <div className="timeline">
                   {detail.events.map((event) => (
@@ -1808,8 +1863,8 @@ function VisitDrawer({
                   <div className="inline-note">
                     <Info size={18} />
                     <p>
-                      These are observations and client reports. No cryptographic operator
-                      verification or geolocation service is connected.
+                      Headers and browser properties are client-controlled. IP estimates come from
+                      local datasets; operator identity remains unverified.
                     </p>
                   </div>
                   <div className="signal-list">

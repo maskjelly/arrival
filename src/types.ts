@@ -26,6 +26,57 @@ export type Site = {
   hasIngestKey: boolean;
   collectorOrigin?: string;
 };
+export type NetworkLookup = {
+  enrichment: {
+    status: 'enriched' | 'non-public address' | 'no match' | 'not installed' | 'lookup failed';
+    source?: string;
+    lookedUpAt?: string;
+    cityBuiltAt?: string;
+    asnBuiltAt?: string;
+  };
+  location?: {
+    countryCode?: string;
+    country?: string;
+    continent?: string;
+    region?: string;
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+    approximate: boolean;
+  };
+  asn?: { number: number; organization: string; prefixLength?: number };
+  hosting?: { provider: string; kind: 'cloud / hosting / CDN'; confidence: 'inferred' };
+};
+export type NetworkContext = NetworkLookup & {
+  ip: string;
+  peerIp?: string;
+  version: 4 | 6 | null;
+  scope: string;
+  ipSource: 'direct connection' | 'trusted proxy' | 'integration reported' | 'stored address';
+  observedAt: string;
+  request: {
+    method?: string;
+    httpVersion?: string;
+    scheme?: string;
+    headers?: Record<string, string>;
+  };
+  history?: { ip: string; observedAt: string; source: string }[];
+};
+export type NetworkStatus = {
+  enabled: boolean;
+  provider: { name: string; url: string; license: string; licenseUrl: string };
+  city: { available: boolean; builtAt?: string; stale?: boolean; type?: string };
+  asn: { available: boolean; builtAt?: string; stale?: boolean; type?: string };
+  job: {
+    running: boolean;
+    stage: string;
+    downloadedBytes?: number;
+    startedAt?: string;
+    completedAt?: string;
+    error?: string;
+  };
+  errors: string[];
+};
 export type Visit = {
   id: string;
   siteId: string;
@@ -37,6 +88,7 @@ export type Visit = {
   isDemo: boolean;
   userAgent: string;
   ip: string;
+  network?: NetworkContext;
   referrer: string;
   entryPath: string;
   agentName: string;
@@ -78,5 +130,15 @@ export type Overview = {
   chart: { time: string; visits: number; events: number }[];
   pages: { path: string; count: number }[];
   sources: { name: string; count: number }[];
+  network: {
+    countryCount: number;
+    located: number;
+    asnResolved: number;
+    publicAddresses: number;
+    total: number;
+    countries: { code: string; name: string; count: number }[];
+    providers: { name: string; count: number }[];
+    status: NetworkStatus;
+  };
   serverTime: string;
 };

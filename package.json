@@ -11,13 +11,16 @@
     "test:ui": "playwright test",
     "check": "npm run format:check && npm test && npm run typecheck && npm run test:ui",
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check src server public/*.css public/*.js sdk tests docs README.md vite.config.ts playwright.config.ts tsconfig.json package.json index.html .github/workflows/ci.yml"
+    "format:check": "prettier --check src server public/*.css public/*.js sdk tests docs README.md vite.config.ts playwright.config.ts tsconfig.json package.json index.html .github/workflows/ci.yml",
+    "geo:update": "tsx --env-file-if-exists=.env server/download-geo.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
     "@fontsource/ibm-plex-sans": "5.3.0",
     "@phosphor-icons/react": "2.1.10",
     "express": "5.3.0",
+    "ipaddr.js": "2.5.0",
+    "maxmind": "5.0.7",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tsx": "4.23.15",

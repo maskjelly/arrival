@@ -28,6 +28,7 @@ There is no external model call, external authentication provider, Redis, distri
 - **Install guides:** Any website, Wix, Shopify and Next.js tabs, copyable snippets and verification from actual collected origin data.
 - **HTTP agents:** discoverable public manifests, question snapshots and a voluntary reporting endpoint with agent-reported provenance.
 - **Inspection/export:** visit details, evidence provenance, event payloads, JSON visit export, and CSV summaries.
+- **Network intelligence:** normalized IPv4/IPv6, capture provenance, approximate location, ASN ownership, inferred hosting network, bounded address changes, local free-database installation/update, Origins view and attributed exports. See [data boundaries](network-data.md).
 - **Persistence:** visits and configuration survive restarts in local SQLite.
 - **Validation:** required-answer checks, permissions, token expiry/revocation, owner/origin checks, credential-free exports, and actual browser/HTTP journeys.
 

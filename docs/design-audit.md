@@ -37,3 +37,9 @@ The skills were already available in the local skills catalog; no additional glo
 Playwright exercises the production build, using a separate test database. It covers the dashboard, exports, optional check-in, custom questions, real cross-origin installation, mobile layouts, keyboard platform tabs, URL/Back behavior and drawer dismissal. Axe checks the workspace views and visit detail sections against WCAG A/AA rules, including text contrast.
 
 Screenshots are inspected at desktop and phone widths, with both real recorded visits and an empty test database. Automated accessibility checks do not replace screen-reader testing, real-device testing, or the user's assessment of the visual design.
+
+## Network intelligence extension
+
+The Origins view uses the same workspace hierarchy: compact coverage metrics, country/operator filters, a searchable evidence list, then source attribution. The visit drawer opens directly to Network when selected from Origins. IPs use monospace; capture source, approximate location, ASN ownership and hosting inference stay separate. A source note explains proxy limitations beside the data.
+
+Desktop and phone screenshots were inspected against the live database, including populated country/operator lists. That pass caught low-contrast country codes; their text was darkened and enlarged. Browser coverage now includes populated lists, long IPv6 addresses, network details, unknown/private addresses and dataset setup. Test-only UI fixtures never enter the workspace database.

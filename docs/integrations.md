@@ -164,3 +164,7 @@ There are no automatic form-input, page-text or private-prompt captures. Follow 
 ## Deployment and limits
 
 The Arrival collector itself must be hosted separately with HTTPS, owner authentication, persistent SQLite storage and backups. This is a self-hosted single-site MVP, not an already-operated multi-tenant SaaS. Native Wix/Shopify apps, complete CDN log connectors, durable delivery and automatic retention are still to build. The platform steps were checked against official documentation; authenticated installs on actual Wix or Shopify stores have not been tested in this workspace.
+
+## IP location and network ownership
+
+Browser collection records the address visible to Arrival. The Express helper reports the host application’s `req.ip`, so configure its proxy trust correctly. The Web Request helper accepts an optional `clientIp` from trusted deployment metadata; it leaves IP unknown when omitted. Never copy an arbitrary forwarding header. Install free local location/ASN databases in the workspace or with `npm run geo:update`. See [network data and trusted proxy setup](network-data.md).

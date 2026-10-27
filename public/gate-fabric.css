@@ -1,0 +1,260 @@
+@font-face {
+  font-family: Outfit;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/outfit-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: Outfit;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/outfit-600.woff2') format('woff2');
+}
+body {
+  font-family: Outfit, system-ui, sans-serif;
+  color: #21151d;
+  background: #ffebf5;
+  background-image:
+    repeating-linear-gradient(0deg, #ffffff18 0px, #ffffff18 1px, transparent 1px, transparent 4px),
+    repeating-linear-gradient(90deg, #9e557709 0px, #9e557709 1px, transparent 1px, transparent 4px);
+}
+a {
+  color: #a94b7d;
+}
+header {
+  background: #ffd1e5;
+  border-bottom: 1px dashed #bf88a3;
+  position: relative;
+}
+header::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 12px;
+  right: 12px;
+  border-bottom: 1px dashed #c991ac88;
+  pointer-events: none;
+}
+header strong {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -1px;
+  color: #21131c;
+}
+header a {
+  font-size: 13px;
+  color: #8d4e6c;
+}
+main {
+  margin-top: 55px;
+}
+.gate {
+  position: relative;
+  background: #fffcfe;
+  border: 1px solid #e0b7ca;
+  border-radius: 14px;
+  padding: 35px;
+  box-shadow: 0 7px 0 -3px #edc6d9;
+  max-width: 620px;
+}
+.gate::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed #e6bfd2;
+  border-radius: 9px;
+  pointer-events: none;
+}
+.gate h1 {
+  font-size: 37px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -1.4px;
+  margin-top: 18px;
+}
+.gate p {
+  color: #836674;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.gate .small {
+  color: #826774;
+  font-size: 12px;
+}
+.tag {
+  border: 1px dashed #ce92b0;
+  background: #ffdfee;
+  color: #9c5879;
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 7px 10px;
+}
+label,
+.field-title {
+  font-size: 14px;
+  font-weight: 400;
+  color: #906078;
+  margin-top: 23px;
+  margin-bottom: 9px;
+}
+input:not([type='checkbox']),
+textarea,
+select {
+  font-family: Outfit, system-ui, sans-serif;
+  background: #fff9fc;
+  border-color: #e6cbd9;
+  border-radius: 7px;
+  color: #704458;
+  font-size: 14px;
+  padding: 12px;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #c15d90;
+  outline: 2px solid #f6c9df;
+  outline-offset: 2px;
+}
+.check {
+  font-size: 13px;
+  color: #8c6277;
+  gap: 9px;
+  margin: 10px 0;
+}
+input[type='checkbox'] {
+  accent-color: #ae4b7d;
+}
+button {
+  font-family: Outfit, system-ui, sans-serif;
+  background: #241720;
+  position: relative;
+  border: 1px solid #241720;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #fff0f8;
+  padding: 16px 21px;
+  box-shadow: 0 3px 0 #ae779044;
+  transition: transform 0.15s;
+}
+button::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px dashed #d8a1bc9e;
+  border-radius: 4px;
+  pointer-events: none;
+}
+button:hover {
+  background: #3d2635;
+  transform: translateY(-1px);
+}
+button:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+.error {
+  color: #ad4c7e !important;
+  font-size: 12px !important;
+}
+.actions {
+  margin-top: 26px;
+  gap: 18px;
+}
+.tiles {
+  gap: 22px;
+}
+.tile {
+  background: #fff9fd;
+  border: 1px dashed #d8a5bd;
+  border-radius: 11px;
+  padding: 26px;
+}
+.tile h2 {
+  font-weight: 400;
+  color: #8f4a6c;
+}
+.tile p {
+  color: #866374;
+}
+.price {
+  font-weight: 400;
+  color: #573046;
+}
+.notice {
+  background: #ffd9e9;
+  border: 1px dashed #d79cb8;
+  color: #935270;
+  padding: 17px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.result {
+  background: #fff7fc;
+  border: 1px dashed #e6bfd4;
+}
+.code {
+  background: #3c2533;
+  color: #f8cee2;
+  border: 1px dashed #c78daabf;
+  outline: 5px solid #3c2533;
+  outline-offset: -7px;
+  border-radius: 9px;
+}
+.lab-footer {
+  border-top: 1px dashed #dcb3c8;
+  color: #826673;
+  font-size: 11px;
+  padding-top: 23px;
+}
+.note {
+  border-color: #d7a2bc;
+}
+.gate .actions .small {
+  font-size: 11px;
+}
+h1,
+h2 {
+  color: #25151e;
+}
+h1 {
+  font-weight: 600;
+}
+p {
+  color: #866576;
+}
+@media (max-width: 650px) {
+  header {
+    padding: 18px 23px;
+    gap: 10px;
+  }
+  .gate {
+    margin: 24px 16px;
+    padding: 28px 24px;
+  }
+  .gate h1 {
+    font-size: 31px;
+  }
+  .gate p {
+    font-size: 13px;
+  }
+  .gate .small {
+    font-size: 11px;
+  }
+  .actions {
+    gap: 15px;
+  }
+  .actions .small {
+    text-align: center;
+  }
+  .tile {
+    padding: 23px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+}

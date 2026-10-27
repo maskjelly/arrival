@@ -154,7 +154,27 @@ function Empty({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('overview');
+  const readView = () => {
+    const value = new URLSearchParams(location.search).get('view');
+    return (
+      ['overview', 'sessions', 'questions', 'integration', 'project'].includes(value ?? '')
+        ? value
+        : 'overview'
+    ) as View;
+  };
+  const [view, setCurrentView] = useState<View>(readView);
+  const setView = (next: View) => {
+    const url = new URL(location.href);
+    url.searchParams.set('view', next);
+    history.pushState({}, '', url);
+    setCurrentView(next);
+    window.scrollTo(0, 0);
+  };
+  useEffect(() => {
+    const back = () => setCurrentView(readView());
+    addEventListener('popstate', back);
+    return () => removeEventListener('popstate', back);
+  }, []);
   const [range, setRange] = useState('24h');
   const [data, setData] = useState<Overview>();
   const [login, setLogin] = useState(false);
@@ -166,6 +186,29 @@ export default function App() {
   const [selected, setSelected] = useState<string>();
   const [mobileNav, setMobileNav] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!mobileNav) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileNav(false);
+        requestAnimationFrame(() => menuButton.current?.focus());
+      }
+    };
+    const desktop = matchMedia('(min-width: 901px)');
+    const close = () => {
+      if (desktop.matches) setMobileNav(false);
+    };
+    document.addEventListener('keydown', escape);
+    desktop.addEventListener('change', close);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener('keydown', escape);
+      desktop.removeEventListener('change', close);
+    };
+  }, [mobileNav]);
   const reload = useCallback(async () => {
     const next = await api<Overview>(`/admin/overview?range=${range}`);
     setData(next);
@@ -317,41 +360,66 @@ export default function App() {
   ];
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileNav ? 'mobile-open' : ''}`}>
+      <a className="skip-link" href="#workspace-main">
+        Skip to workspace content
+      </a>
+      {mobileNav && (
+        <button
+          className="nav-backdrop"
+          aria-label="Close navigation"
+          onClick={() => {
+            setMobileNav(false);
+            requestAnimationFrame(() => menuButton.current?.focus());
+          }}
+        />
+      )}
+      <aside
+        id="workspace-navigation"
+        className={`sidebar ${mobileNav ? 'mobile-open' : ''}`}
+        aria-label="Workspace navigation"
+      >
         <a href="/" aria-label="Arrival home">
-          <Brand light />
+          <Brand />
         </a>
         <div className="workspace">
-          <span className="workspace-symbol">N</span>
+          <span className="workspace-symbol">{data.site.name.slice(0, 1).toUpperCase()}</span>
           <div>
             <strong>{data.site.name}</strong>
-            <small>Agent intelligence</small>
+            <small>Website workspace</small>
           </div>
-          <span className="workspace-chevron">⌄</span>
         </div>
         <div className="nav-label">Workspace</div>
-        <nav>
+        <nav aria-label="Workspace pages">
           {views.map((item) => (
-            <button
+            <a
               key={item.id}
-              className={view === item.id ? 'active' : ''}
-              onClick={() => {
+              href={`/app?view=${item.id}`}
+              aria-current={view === item.id ? 'page' : undefined}
+              className={`${view === item.id ? 'active' : ''} ${item.id === 'project' ? 'secondary-nav' : ''}`}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
                 setView(item.id);
                 setMobileNav(false);
+                requestAnimationFrame(() => document.getElementById('workspace-main')?.focus());
               }}
             >
-              <item.icon size={19} weight={view === item.id ? 'duotone' : 'regular'} />
+              <item.icon
+                size={19}
+                weight={view === item.id ? 'duotone' : 'regular'}
+                aria-hidden="true"
+              />
               {item.name}
               {item.id === 'sessions' && data.stats.visits > 0 && (
                 <span className="nav-count">{count(data.stats.visits)}</span>
               )}
-            </button>
+            </a>
           ))}
         </nav>
         <div className="sidebar-note">
-          <ShieldWarning size={21} />
-          <strong>Evidence, with context.</strong>
-          <p>Declared purpose and observed activity stay separate. Identity is unverified.</p>
+          <span className="observation-dot" />
+          <strong>Observability first</strong>
+          <p>Your website stays open. Check-in is optional.</p>
         </div>
         <a className="sidebar-link" href="/lab" target="_blank" rel="noreferrer">
           Explore the demo website <ArrowSquareOut size={16} />
@@ -374,11 +442,14 @@ export default function App() {
           </button>
         </div>
       </aside>
-      <div className="app-body">
+      <div className="app-body" inert={mobileNav}>
         <header className="topbar">
           <button
+            ref={menuButton}
             className="mobile-menu icon-button"
             aria-label="Toggle navigation"
+            aria-expanded={mobileNav}
+            aria-controls="workspace-navigation"
             onClick={() => setMobileNav((v) => !v)}
           >
             <ListChecks size={22} />
@@ -387,13 +458,14 @@ export default function App() {
             arrival.
           </a>
           <div className="breadcrumb">
-            Workspace <span>/</span>
             <strong>{views.find((v) => v.id === view)?.name}</strong>
+            <span>/</span>
+            <span className="workspace-domain">{new URL(data.site.origin).hostname}</span>
           </div>
           <div className="topbar-right">
             <span className="connection">
               <i />
-              Connected
+              Workspace synced
             </span>
             <button
               className={`icon-button ${refreshing ? 'rotating' : ''}`}
@@ -405,7 +477,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main className="main-content">
+        <main className="main-content" id="workspace-main" tabIndex={-1}>
           {error && (
             <div className="error-banner" role="alert">
               <WarningCircle size={18} />
@@ -419,7 +491,7 @@ export default function App() {
             <>
               <div className="page-heading">
                 <div>
-                  <div className="section-context">{data.site.name} / Website activity</div>
+                  <div className="section-context">Website analytics</div>
                   <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
                   <p>
                     {view === 'overview'
@@ -451,6 +523,8 @@ export default function App() {
                   selectVisit={setSelected}
                   showVisits={() => setView('sessions')}
                   range={range}
+                  connectSite={() => setView('integration')}
+                  editQuestions={() => setView('questions')}
                 />
               ) : (
                 <VisitsPage
@@ -532,7 +606,11 @@ function OverviewPage({
   selectVisit,
   showVisits,
   range,
+  connectSite,
+  editQuestions,
 }: {
+  connectSite: () => void;
+  editQuestions: () => void;
   data: Overview;
   runDemo: () => void;
   demoBusy: boolean;
@@ -653,7 +731,11 @@ function OverviewPage({
             title="Your first arrival starts here."
             action={
               <div className="inline-actions">
-                <button className="button primary" disabled={demoBusy} onClick={runDemo}>
+                <button className="button primary" onClick={connectSite}>
+                  <Code size={16} />
+                  Connect a website
+                </button>
+                <button className="button secondary" disabled={demoBusy} onClick={runDemo}>
                   <Play size={16} weight="fill" />
                   {demoBusy ? 'Running a real HTTP visit…' : 'Run a demo agent'}
                 </button>
@@ -693,9 +775,7 @@ function OverviewPage({
               ))}
             </div>
           ) : (
-            <p className="quiet-empty">
-              Page paths appear after an admitted visitor starts browsing.
-            </p>
+            <p className="quiet-empty">Page paths appear as visitors browse your website.</p>
           )}
         </section>
         <section className="start-panel">
@@ -708,9 +788,9 @@ function OverviewPage({
               Collect objectives, discovery sources, evaluation criteria, and your own custom
               questions.
             </p>
-            <a className="text-button" href="/lab" target="_blank" rel="noreferrer">
-              Try the check-in experience <ArrowSquareOut size={16} />
-            </a>
+            <button className="text-button" onClick={editQuestions}>
+              Edit check-in questions <ArrowRight size={16} />
+            </button>
           </div>
         </section>
       </div>
@@ -728,7 +808,14 @@ function OverviewPage({
 }
 
 function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boolean }) {
-  const width = 700,
+  const [compact, setCompact] = useState(() => matchMedia('(max-width: 650px)').matches);
+  useEffect(() => {
+    const media = matchMedia('(max-width: 650px)');
+    const change = () => setCompact(media.matches);
+    media.addEventListener('change', change);
+    return () => media.removeEventListener('change', change);
+  }, []);
+  const width = compact ? 340 : 700,
     height = 180,
     left = 34,
     right = 12,
@@ -739,6 +826,7 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
   const y = (value: number) => top + (height - top - bottom) * (1 - value / maximum);
   const line = (key: 'events' | 'visits') =>
     points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p[key])}`).join(' ');
+  const labelStep = Math.max(1, Math.ceil((points.length - 1) / (compact ? 3 : 4)));
   return (
     <div className="chart-wrap">
       <svg
@@ -748,8 +836,8 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
       >
         <defs>
           <linearGradient id="traffic-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ed80b3" stopOpacity=".13" />
-            <stop offset="100%" stopColor="#ed80b3" stopOpacity="0" />
+            <stop offset="0%" stopColor="#4965df" stopOpacity=".13" />
+            <stop offset="100%" stopColor="#4965df" stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((r) => (
@@ -759,14 +847,14 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
               x2={width - right}
               y1={y(maximum * r)}
               y2={y(maximum * r)}
-              stroke="#eee3e9"
+              stroke="#e9edf3"
               strokeDasharray="3 5"
             />
             <text
               x={left - 10}
               y={y(maximum * r) + 4}
               textAnchor="end"
-              fill="#776a73"
+              fill="#697588"
               fontSize="10"
             >
               {Math.round(maximum * r)}
@@ -782,18 +870,18 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
             <path
               d={line('visits')}
               fill="none"
-              stroke="#383037"
+              stroke="#8a97ad"
               strokeWidth="2"
               strokeDasharray="4 4"
             />
-            <path d={line('events')} fill="none" stroke="#d967a0" strokeWidth="2.4" />
+            <path d={line('events')} fill="none" stroke="#4462dc" strokeWidth="2.4" />
             {points.map((p, i) => (
               <circle
                 key={p.time}
                 cx={x(i)}
                 cy={y(p.events)}
                 r={p.events > 0 ? 3 : 0}
-                fill="#d967a0"
+                fill="#4462dc"
               >
                 <title>
                   {date(p.time)}: {p.events} events, {p.visits} visits
@@ -805,7 +893,9 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
         {points
           .filter(
             (_p, i) =>
-              i % Math.max(1, Math.floor((points.length - 1) / 4)) === 0 || i === points.length - 1,
+              i === 0 ||
+              i === points.length - 1 ||
+              (i % labelStep === 0 && points.length - 1 - i >= labelStep * 0.6),
           )
           .map((p) => (
             <text
@@ -813,7 +903,7 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
               x={x(points.indexOf(p))}
               y={height - 4}
               textAnchor={points.indexOf(p) === points.length - 1 ? 'end' : 'middle'}
-              fill="#776a73"
+              fill="#697588"
               fontSize="10"
             >
               {points.length > 7
@@ -843,64 +933,97 @@ function VisitTable({
   selectVisit: (id: string) => void;
 }) {
   return (
-    <div className="table-scroll">
-      <table className="visit-table">
-        <thead>
-          <tr>
-            <th>Visitor</th>
-            <th>Declared objective</th>
-            <th>Status</th>
-            <th>Activity</th>
-            <th>Arrived</th>
-            <th>
-              <span className="sr-only">Open visit</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {visits.map((visit) => (
-            <tr key={visit.id}>
-              <td>
-                <button className="visitor-cell" onClick={() => selectVisit(visit.id)}>
-                  <Avatar visit={visit} />
-                  <span>
-                    <strong>{visit.agentName}</strong>
-                    <small>{visit.isDemo ? 'Controlled demo' : sourceName(visit.source)}</small>
-                  </span>
-                </button>
-              </td>
-              <td>
-                <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
-                  {visit.objective || 'No purpose declared'}
-                </p>
-              </td>
-              <td>
-                <Status visit={visit} />
-              </td>
-              <td>
-                <span className="activity-count">
-                  {visit.pageCount} <small>pages</small>
-                  <span>·</span>
-                  {visit.eventCount} <small>events</small>
-                </span>
-              </td>
-              <td>
-                <span className="date-cell">{date(visit.createdAt)}</span>
-              </td>
-              <td>
-                <button
-                  className="icon-button"
-                  aria-label={`Inspect ${visit.agentName}`}
-                  onClick={() => selectVisit(visit.id)}
-                >
-                  <ArrowRight size={18} />
-                </button>
-              </td>
+    <>
+      <div
+        className="table-scroll desktop-visits"
+        tabIndex={0}
+        role="region"
+        aria-label="Visit records"
+      >
+        <table className="visit-table">
+          <thead>
+            <tr>
+              <th>Visitor</th>
+              <th>Declared objective</th>
+              <th>Status</th>
+              <th>Activity</th>
+              <th>Arrived</th>
+              <th>
+                <span className="sr-only">Open visit</span>
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {visits.map((visit) => (
+              <tr key={visit.id}>
+                <td>
+                  <button className="visitor-cell" onClick={() => selectVisit(visit.id)}>
+                    <Avatar visit={visit} />
+                    <span>
+                      <strong>{visit.agentName}</strong>
+                      <small>{visit.isDemo ? 'Controlled demo' : sourceName(visit.source)}</small>
+                    </span>
+                  </button>
+                </td>
+                <td>
+                  <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
+                    {visit.objective || 'No purpose declared'}
+                  </p>
+                </td>
+                <td>
+                  <Status visit={visit} />
+                </td>
+                <td>
+                  <span className="activity-count">
+                    {visit.pageCount} <small>pages</small>
+                    <span>·</span>
+                    {visit.eventCount} <small>events</small>
+                  </span>
+                </td>
+                <td>
+                  <span className="date-cell">{date(visit.createdAt)}</span>
+                </td>
+                <td>
+                  <button
+                    className="icon-button"
+                    aria-label={`Inspect ${visit.agentName}`}
+                    onClick={() => selectVisit(visit.id)}
+                  >
+                    <ArrowRight size={18} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="mobile-visit-list" aria-label="Recent visit records">
+        {visits.map((visit) => (
+          <li key={visit.id}>
+            <button
+              className="mobile-visit-card"
+              aria-label={`Inspect ${visit.agentName}`}
+              onClick={() => selectVisit(visit.id)}
+            >
+              <span className="mobile-visit-heading">
+                <Avatar visit={visit} />
+                <strong>{visit.agentName}</strong>
+                <Status visit={visit} />
+              </span>
+              <span className={`mobile-visit-objective ${visit.objective ? '' : 'muted'}`}>
+                {visit.objective || 'No purpose declared'}
+              </span>
+              <span className="mobile-visit-meta">
+                <span>
+                  {visit.pageCount} pages · {visit.eventCount} events
+                </span>
+                <time>{date(visit.createdAt)}</time>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -1032,8 +1155,8 @@ function QuestionsPage({
       <div className="page-heading">
         <div>
           <div className="section-context">Check-in configuration</div>
-          <h1>Ask what matters to you.</h1>
-          <p>Give each arrival a little context. Answers stay attached to the visit.</p>
+          <h1>Check-in questions</h1>
+          <p>Choose the context you want agents to share. Answers stay attached to each visit.</p>
         </div>
         <button
           className="button primary"
@@ -1066,21 +1189,24 @@ function QuestionsPage({
       )}
       <div className="questions-layout">
         <div>
-          <section className="panel admission-policy">
-            <div>
-              <strong>Advanced: require answers on the demo</strong>
-              <p>Off by default. Your website embed always stays nonblocking.</p>
-            </div>
-            <button
-              className={`switch ${required ? 'on' : ''}`}
-              role="switch"
-              aria-checked={required}
-              aria-label="Require check-in"
-              onClick={() => setRequired((v) => !v)}
-            >
-              <span />
-            </button>
-          </section>
+          <details className="advanced-settings">
+            <summary>Advanced demo settings</summary>
+            <section className="admission-policy">
+              <div>
+                <strong>Advanced: require answers on the demo</strong>
+                <p>Off by default. Your website embed always stays nonblocking.</p>
+              </div>
+              <button
+                className={`switch ${required ? 'on' : ''}`}
+                role="switch"
+                aria-checked={required}
+                aria-label="Require check-in"
+                onClick={() => setRequired((v) => !v)}
+              >
+                <span />
+              </button>
+            </section>
+          </details>
           <div className="question-list">
             {questions.map((q, index) => (
               <section className="panel question-card" key={q.id}>
@@ -1234,7 +1360,7 @@ function CodeBlock({ value, copy }: { value: string; copy: (value: string) => vo
       <button title="Copy code" aria-label="Copy code" onClick={() => copy(value)}>
         <Copy size={17} />
       </button>
-      <pre>{value}</pre>
+      <pre tabIndex={0}>{value}</pre>
     </div>
   );
 }
@@ -1259,7 +1385,7 @@ function IntegrationPage({
       <div className="page-heading">
         <div>
           <div className="section-context">Collection setup</div>
-          <h1>Turn visits into evidence.</h1>
+          <h1>Connect your website</h1>
           <p>Save your website, choose your platform, and paste the snippet once.</p>
         </div>
       </div>
@@ -1319,7 +1445,10 @@ function IntegrationPage({
             </form>
           </section>
           <InstallGuide site={site} copy={copy} />
-          <section className="panel setup-panel">
+          <details className="panel setup-panel server-setup">
+            <summary>
+              <Key size={18} /> Add server-side collection <span>For HTTP-only agents</span>
+            </summary>
             <div className="setup-heading">
               <Key size={24} />
               <div>
@@ -1411,7 +1540,7 @@ export const config = {
               for Next.js. Server reporting is best-effort and never grants or denies website
               access.
             </p>
-          </section>
+          </details>
           {error && (
             <div className="error-banner" role="alert">
               {error}
@@ -1552,7 +1681,7 @@ function VisitDrawer({
                 <strong>{visit.classification}</strong>
               </div>
             </div>
-            <div className="drawer-tabs">
+            <div className="drawer-tabs" role="group" aria-label="Visit detail sections">
               {[
                 ['answers', 'Task & answers'],
                 ['activity', 'Activity'],
@@ -1562,6 +1691,7 @@ function VisitDrawer({
                 <button
                   key={key}
                   className={tab === key ? 'active' : ''}
+                  aria-pressed={tab === key}
                   onClick={() => setTab(key)}
                 >
                   {label}
@@ -1569,7 +1699,12 @@ function VisitDrawer({
                 </button>
               ))}
             </div>
-            <div className="drawer-content">
+            <div
+              className="drawer-content"
+              tabIndex={0}
+              role="region"
+              aria-label="Visit details content"
+            >
               {tab === 'answers' && (
                 <>
                   {visit.objective ? (
@@ -1660,7 +1795,7 @@ function VisitDrawer({
                         {Object.keys(event.data).length > 0 && (
                           <details>
                             <summary>Event details</summary>
-                            <pre>{JSON.stringify(event.data, null, 2)}</pre>
+                            <pre tabIndex={0}>{JSON.stringify(event.data, null, 2)}</pre>
                           </details>
                         )}
                       </div>
@@ -1717,7 +1852,9 @@ function VisitDrawer({
                       Copy JSON
                     </button>
                   </div>
-                  <pre className="raw-data">{JSON.stringify(detail, null, 2)}</pre>
+                  <pre className="raw-data" tabIndex={0}>
+                    {JSON.stringify(detail, null, 2)}
+                  </pre>
                 </>
               )}
             </div>

@@ -7,7 +7,7 @@ This describes the implemented local MVP, not a production SaaS. The same featur
 | Part         | Current implementation                                                                |
 | ------------ | ------------------------------------------------------------------------------------- |
 | Frontend     | React 19.3, TypeScript 7, Vite 8.3                                                    |
-| Interface    | Native CSS, self-hosted Outfit, IBM Plex Mono for code, Phosphor icons                |
+| Interface    | Native CSS, self-hosted IBM Plex Sans, IBM Plex Mono for code, Phosphor icons         |
 | Server       | Node.js; verified locally on Node 26. Express 5.3 with TypeScript executed by tsx     |
 | Storage      | SQLite through Node's built-in `node:sqlite`, WAL, prepared statements                |
 | Validation   | Zod 4.6                                                                               |
@@ -18,7 +18,7 @@ There is no external model call, external authentication provider, Redis, distri
 
 ## Implemented
 
-- **Public landing page at `/`:** original pink fabric styling, interactive example, product explanation, build status, stack, and working navigation.
+- **Public landing page at `/`:** neutral surfaces, cobalt accents and readable typography, interactive example, product explanation, build status, stack, and working navigation.
 - **Workspace at `/app`:** overview, visit explorer, editable questions, collection setup, and Built & next.
 - **Questionnaires:** required/optional short and long answers, single/multiple choice, configurable order, and historical schema snapshots.
 - **Open demo at `/lab`:** immediate access, optional browser/HTTP check-in and actual request/action recording. Mandatory admission remains an advanced, off-by-default demo option.
@@ -57,4 +57,4 @@ There is no external model call, external authentication provider, Redis, distri
 
 ## Design direction
 
-The landing page takes its product-led hierarchy and concrete demonstrations as a reference from [ByDefault](https://www.bydefault.so/). The layout, copy, examples, and pink woven visual system are original to Arrival. Cloth effects use CSS weaving patterns, matte surfaces, dashed inset stitching, and a local SVG grain asset; they do not require an image service.
+The dashboard uses a white/slate/cobalt palette, self-hosted IBM Plex Sans and Mono, compact data panels and one persistent workspace navigation. The landing page, public demo and optional check-in use the same visual language. See [the design audit](design-audit.md) for findings, tradeoffs and validation.

@@ -7,7 +7,7 @@ export default function BuildStatus({ compact = false }: { compact?: boolean }) 
       <div className="build-columns">
         <section className="build-column built-column">
           <div className="build-column-heading">
-            <span className="fabric-label">
+            <span className="section-label">
               <Check size={15} weight="bold" />
               Working today
             </span>
@@ -27,7 +27,7 @@ export default function BuildStatus({ compact = false }: { compact?: boolean }) 
         </section>
         <section className="build-column next-column">
           <div className="build-column-heading">
-            <span className="fabric-label light-label">
+            <span className="section-label light-label">
               <ArrowUpRight size={15} />
               Still to build
             </span>
@@ -36,7 +36,7 @@ export default function BuildStatus({ compact = false }: { compact?: boolean }) 
           <div className="build-items">
             {nextFeatures.map((item) => (
               <article key={item.title}>
-                <span className="unsewn-square" />
+                <span className="pending-dot" />
                 <div>
                   <h3>{item.title}</h3>
                   <p>{item.detail}</p>

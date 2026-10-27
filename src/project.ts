@@ -5,8 +5,8 @@ export const stack = [
   { name: 'SQLite', role: 'Persistent visits, versioned questions, answers, and event history.' },
   { name: 'Zod 4', role: 'Server validation for answers, configuration, and telemetry.' },
   {
-    name: 'Native CSS + Outfit',
-    role: 'Woven surfaces, stitched controls, and responsive layouts.',
+    name: 'Native CSS + IBM Plex',
+    role: 'Neutral analytics surfaces, a restrained cobalt accent, readable typography, and responsive layouts.',
   },
   { name: 'Playwright + node:test', role: 'Browser journeys and API/integration checks.' },
 ];

@@ -75,16 +75,32 @@ export default function InstallGuide({
         {platforms.map((p) => (
           <button
             key={p.id}
+            id={`platform-${p.id}`}
             role="tab"
+            tabIndex={platform === p.id ? 0 : -1}
+            aria-controls="install-platform-panel"
             aria-selected={platform === p.id}
             className={platform === p.id ? 'selected' : ''}
             onClick={() => setPlatform(p.id)}
+            onKeyDown={(event) => {
+              const index = platforms.findIndex((item) => item.id === p.id);
+              let next = index;
+              if (event.key === 'ArrowRight') next = (index + 1) % platforms.length;
+              else if (event.key === 'ArrowLeft')
+                next = (index + platforms.length - 1) % platforms.length;
+              else if (event.key === 'Home') next = 0;
+              else if (event.key === 'End') next = platforms.length - 1;
+              else return;
+              event.preventDefault();
+              setPlatform(platforms[next].id);
+              document.getElementById(`platform-${platforms[next].id}`)?.focus();
+            }}
           >
             {p.name}
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={`${current.name} installation`}>
+      <div id="install-platform-panel" role="tabpanel" aria-labelledby={`platform-${platform}`}>
         <ol className="install-steps">
           {current.steps.map((step) => (
             <li key={step}>{step}</li>
@@ -110,7 +126,7 @@ export default function InstallGuide({
           >
             <Copy size={17} />
           </button>
-          <pre>{snippet}</pre>
+          <pre tabIndex={0}>{snippet}</pre>
         </div>
       </div>
       <p className="setup-note">

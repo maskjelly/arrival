@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { installSnippet } from '../../src/install.ts';
+import AxeBuilder from '@axe-core/playwright';
 
 test('public landing page has interactive examples, build status, and working app navigation', async ({
   page,
@@ -114,13 +115,13 @@ test('a browser browses freely, optionally shares its task and records browser s
 test('custom questions persist and the interface fits a phone', async ({ page }) => {
   await page.goto('/app');
   await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
-  await page.getByRole('button', { name: 'Questions', exact: true }).click();
+  await page.getByRole('link', { name: 'Questions', exact: true }).click();
   await page.getByRole('button', { name: /Add a custom question/ }).click();
   await page.locator('.question-label').last().fill('What is your expected evaluation timeline?');
   await page.getByRole('button', { name: 'Save questions' }).click();
   await expect(page.getByRole('status')).toContainText('Questions saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Questions', exact: true }).click();
+  await page.getByRole('link', { name: 'Questions', exact: true }).click();
   await expect(page.locator('.question-label').last()).toHaveValue(
     'What is your expected evaluation timeline?',
   );
@@ -128,7 +129,7 @@ test('custom questions persist and the interface fits a phone', async ({ page })
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Toggle navigation' }).click();
-  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
   await expect
     .poll(() => page.locator('.sidebar').evaluate((el) => el.getBoundingClientRect().right))
@@ -141,7 +142,7 @@ test('installation setup offers copyable platform snippets and checks real colle
   page,
 }) => {
   await page.goto('/app');
-  await page.getByRole('button', { name: /Connect a website/ }).click();
+  await page.getByRole('link', { name: 'Connect a website', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Paste once. Keep browsing.' })).toBeVisible();
   await page.getByRole('tab', { name: 'Wix', exact: true }).click();
   await expect(page.getByRole('tabpanel')).toContainText('Settings → Custom Code');
@@ -292,4 +293,65 @@ test('an external website collects voluntary answers and annotated activity thro
     host.closeAllConnections();
     await new Promise<void>((done) => host.close(() => done()));
   }
+});
+
+test('workspace views support direct links, keyboard navigation and accessible contrast', async ({
+  page,
+}) => {
+  for (const view of ['overview', 'sessions', 'questions', 'integration', 'project']) {
+    await page.goto('/app?view=' + view);
+    await expect(page.locator('.page-heading h1')).toBeVisible();
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(results.violations, view).toEqual([]);
+  }
+  await page.goto('/app?view=integration');
+  await expect(
+    page.getByRole('heading', { name: 'Connect your website', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Any website', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Wix', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab', { name: 'Wix', exact: true })).toBeFocused();
+  await page.getByRole('link', { name: 'Visits', exact: false }).first().click();
+  await expect(page).toHaveURL(/view=sessions/);
+  await page.goBack();
+  await expect(
+    page.getByRole('heading', { name: 'Connect your website', exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Connect a website', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.sidebar')).not.toBeVisible();
+  await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.sidebar')).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Toggle navigation', exact: true })).toBeFocused();
+  expect(await page.locator('.app-body').getAttribute('inert')).toBeNull();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const mobile = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(mobile.violations).toEqual([]);
+  await page.goto('/app?view=sessions');
+  await page.locator('.mobile-visit-card').first().click();
+  const drawer = page.getByRole('dialog', { name: 'Visit details' });
+  await expect(drawer).toBeVisible();
+  for (const tab of ['Task & answers', 'Activity', 'Signals', 'Raw data']) {
+    await drawer.getByRole('button', { name: tab, exact: tab !== 'Activity' }).click();
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(results.violations, tab).toEqual([]);
+  }
+  await page.keyboard.press('Escape');
+  await expect(drawer).not.toBeVisible();
 });

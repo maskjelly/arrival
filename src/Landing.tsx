@@ -73,7 +73,7 @@ export default function Landing() {
             Built & next
           </a>
         </nav>
-        <a className="sewn-button black-button nav-cta" href="/app">
+        <a className="landing-button black-button nav-cta" href="/app">
           Open workspace <ArrowUpRight size={17} />
         </a>
         <button
@@ -88,8 +88,8 @@ export default function Landing() {
       <main id="landing-main">
         <section className="landing-hero">
           <div className="hero-copy">
-            <span className="fabric-label hero-label">
-              <span className="thread-cross" />
+            <span className="section-label hero-label">
+              <span className="hero-indicator" />
               Agent analytics, with a proper introduction
             </span>
             <h1>
@@ -102,17 +102,15 @@ export default function Landing() {
               <br className="desktop-break" /> Follow the task, the pages, and what happens next.
             </p>
             <div className="hero-actions">
-              <a className="sewn-button black-button" href="/app">
+              <a className="landing-button black-button" href="/app">
                 Explore the workspace <ArrowUpRight size={19} />
               </a>
-              <a className="sewn-button pink-button" href="/lab">
+              <a className="landing-button outline-button" href="/lab">
                 Try the agent check-in <ArrowRight size={18} />
               </a>
             </div>
             <span className="hero-note">A working local MVP. No sign-up or model key needed.</span>
           </div>
-          <div className="hero-stitch left-stitch" aria-hidden="true" />
-          <div className="hero-stitch right-stitch" aria-hidden="true" />
           <div className="arrival-preview">
             <div className="preview-top">
               <span className="preview-title">
@@ -126,7 +124,7 @@ export default function Landing() {
             <div className="preview-main">
               <section className="preview-declaration">
                 <div className="preview-agent">
-                  <span className="cloth-avatar">
+                  <span className="preview-avatar">
                     <Robot size={26} />
                   </span>
                   <div>
@@ -161,7 +159,7 @@ export default function Landing() {
               <section className="preview-trail">
                 <div className="trail-title">
                   <Path size={19} />
-                  <h2>Then follow the thread.</h2>
+                  <h2>Follow the visit.</h2>
                 </div>
                 <ol>
                   {current.pages.map((path, index) => (
@@ -195,7 +193,7 @@ export default function Landing() {
             </div>
             <div className="preview-foot">
               <span>
-                <span className="stitched-square" />
+                <span className="signal-dot" />
                 Questions you choose. Context you can inspect.
               </span>
               <a href="/app">
@@ -216,7 +214,7 @@ export default function Landing() {
 
         <section id="product" className="product-section landing-section">
           <div className="section-intro">
-            <span className="fabric-label light-label">The whole visit, stitched together</span>
+            <span className="section-label light-label">Intent and activity, in one place</span>
             <h2>
               Go beyond
               <br />
@@ -262,9 +260,9 @@ export default function Landing() {
                 </p>
                 <div className="inline-trail">
                   <code>/docs</code>
-                  <span className="thread-link" />
+                  <span className="trail-connector" />
                   <code>/pricing</code>
-                  <span className="thread-link" />
+                  <span className="trail-connector" />
                   <span className="outcome-tag">
                     <Check size={13} />
                     Downloaded
@@ -294,7 +292,7 @@ export default function Landing() {
 
         <section id="how-it-works" className="how-section landing-section">
           <div className="section-heading">
-            <span className="fabric-label light-label">A simple first conversation</span>
+            <span className="section-label light-label">A simple first conversation</span>
             <h2>
               From “who’s there?”
               <br />
@@ -338,7 +336,7 @@ export default function Landing() {
             </article>
           </div>
           <p className="honesty-note">
-            <span className="stitched-square" />
+            <span className="signal-dot" />
             Your website stays open. Questions are optional, the prompt never takes focus, and
             collection failures do not block the task.
           </p>
@@ -346,7 +344,7 @@ export default function Landing() {
 
         <section id="build-status" className="status-section landing-section">
           <div className="section-heading">
-            <span className="fabric-label light-label">Open about where we are</span>
+            <span className="section-label light-label">Open about where we are</span>
             <h2>
               A real MVP.
               <br />
@@ -390,15 +388,14 @@ export default function Landing() {
         </section>
 
         <section className="landing-final">
-          <span className="fabric-label">Say hello to the other side of your traffic.</span>
+          <span className="section-label">Say hello to the other side of your traffic.</span>
           <h2>
             Give every arrival
             <br />a little more context.
           </h2>
-          <a className="sewn-button black-button" href="/app">
+          <a className="landing-button black-button" href="/app">
             Open your workspace <ArrowUpRight size={20} />
           </a>
-          <div className="final-thread" aria-hidden="true" />
         </section>
       </main>
       <footer className="landing-footer">

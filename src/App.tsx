@@ -602,7 +602,6 @@ export default function App() {
             <span className="crumb-workspace">{data.site.name}</span>
             <span className="crumb-sep">/</span>
             <strong>{views.find((v) => v.id === view)?.name}</strong>
-            <span className="workspace-domain">{new URL(data.site.origin).hostname}</span>
           </div>
           <div className="topbar-right">
             <span className="connection">

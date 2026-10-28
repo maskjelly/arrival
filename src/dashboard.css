@@ -321,14 +321,6 @@ body {
   color: var(--ink);
   font-weight: 600;
 }
-.app-shell .workspace-domain {
-  margin-left: 4px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-  color: var(--faint);
-  font-size: 11px;
-  max-width: 300px;
-}
 .app-shell .topbar-right {
   margin-left: auto;
   display: flex;
@@ -2243,8 +2235,7 @@ body {
     gap: 8px;
   }
   .crumb-workspace,
-  .crumb-sep,
-  .workspace-domain {
+  .crumb-sep {
     display: none;
   }
   .app-shell .connection {

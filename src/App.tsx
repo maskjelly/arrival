@@ -949,7 +949,7 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
               x2={width - right}
               y1={y(maximum * r)}
               y2={y(maximum * r)}
-              stroke="#e9edf3"
+              stroke="#e5ece7"
               strokeDasharray="3 5"
             />
             <text
@@ -972,11 +972,11 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
             <path
               d={line('visits')}
               fill="none"
-              stroke="#8a97ad"
+              stroke="#81998a"
               strokeWidth="2"
               strokeDasharray="4 4"
             />
-            <path d={line('events')} fill="none" stroke="#4462dc" strokeWidth="2.4" />
+            <path d={line('events')} fill="none" stroke="#3d7656" strokeWidth="2.4" />
             {points.map((p, i) => (
               <circle
                 key={p.time}

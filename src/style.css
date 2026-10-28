@@ -418,8 +418,6 @@ label {
   display: none;
 }
 .main-content {
-  max-width: 1360px;
-  margin-inline: auto;
   max-width: 1536px;
   margin: auto;
   padding: 30px 32px 24px;

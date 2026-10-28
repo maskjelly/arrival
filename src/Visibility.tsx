@@ -617,7 +617,7 @@ export default function Visibility({
                     </span>
                   </div>
                   {crawlerClients.length ? (
-                    crawlerClients.slice(0, 3).map((client) => (
+                    crawlerClients.slice(0, 4).map((client) => (
                       <button
                         type="button"
                         className="vis-client-row"
@@ -660,7 +660,7 @@ export default function Visibility({
                     </span>
                   </div>
                   {agentClients.length ? (
-                    agentClients.slice(0, 3).map((client) => (
+                    agentClients.slice(0, 4).map((client) => (
                       <button
                         type="button"
                         className="vis-client-row"

@@ -26,6 +26,10 @@ export function parsePrefixes(value: unknown): string[] {
 export class ProviderRanges {
   private feeds: RangeFeed[];
   private pending?: Promise<void>;
+  private compiled = new WeakMap<
+    RangeFeed,
+    { prefix: string; range: ReturnType<typeof ipaddr.parseCIDR> }[]
+  >();
   private nextRefresh = 0;
   constructor(initial: RangeFeed[] = bundled) {
     this.feeds = initial;
@@ -63,14 +67,20 @@ export class ProviderRanges {
       const address = ipaddr.process(ip);
       if (address.range() !== 'unicast') return [];
       return this.feeds.flatMap((feed) => {
-        const prefix = feed.prefixes.find((value) => {
-          try {
-            const range = ipaddr.parseCIDR(value);
-            return address.kind() === range[0].kind() && address.match(range);
-          } catch {
-            return false;
-          }
-        });
+        let ranges = this.compiled.get(feed);
+        if (!ranges) {
+          ranges = feed.prefixes.flatMap((prefix) => {
+            try {
+              return [{ prefix, range: ipaddr.parseCIDR(prefix) }];
+            } catch {
+              return [];
+            }
+          });
+          this.compiled.set(feed, ranges);
+        }
+        const prefix = ranges.find(
+          ({ range }) => address.kind() === range[0].kind() && address.match(range),
+        )?.prefix;
         return prefix
           ? [
               {

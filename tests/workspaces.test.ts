@@ -76,6 +76,21 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     const exported = await read('/api/admin/export', bc);
     assert.equal(exported.data.visits.length, 1);
     assert.equal(exported.data.visits[0].entryPath, '/only-b');
+    const visibility = await read('/api/admin/visibility?range=all', bc);
+    assert.equal(visibility.status, 200);
+    assert.deepEqual(
+      visibility.data.records.map((v: any) => v.entryPath),
+      ['/only-b'],
+    );
+    assert.equal((await read('/api/admin/visibility?kind=invalid', bc)).status, 422);
+    assert.equal((await read('/api/admin/visibility', '')).status, 401);
+    const csv = await fetch(base + '/api/admin/visibility/export?range=all', {
+      headers: { Cookie: bc },
+    });
+    const csvText = await csv.text();
+    assert.equal(csv.status, 200);
+    assert.ok(csvText.includes('/only-b'));
+    assert.ok(!csvText.includes('/only-a'));
     const foreign = await post(
       '/api/collect/' + av.site.id,
       { type: 'start', path: '/' },

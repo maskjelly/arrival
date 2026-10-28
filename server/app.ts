@@ -1,3 +1,4 @@
+import { visibilityReport } from './visibility.ts';
 import { providerRanges } from './provider-ranges.ts';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
@@ -586,6 +587,94 @@ export async function createApp(
       serverTime: new Date().toISOString(),
     });
   });
+  app.get(['/api/admin/visibility', '/api/admin/visibility/export'], async (req, res) => {
+    const parsed = z
+      .object({
+        range: z.enum(['24h', '7d', 'all']).default('7d'),
+        kind: z.enum(['crawler', 'agent', 'automation', 'unidentified']).optional(),
+        provider: text(100).optional(),
+        client: text(100).optional(),
+        source: text(500).optional(),
+        query: text(300).optional(),
+        page: text(500).optional(),
+        search: text(200).optional(),
+        includeDemo: z.enum(['true', 'false']).optional(),
+        offset: z.coerce.number().int().min(0).max(5000).default(0),
+      })
+      .safeParse(req.query);
+    if (!parsed.success) {
+      res.status(422).json({ error: 'Invalid visibility filters.' });
+      return;
+    }
+    if (options.refreshProviderRanges) await providerRanges.refresh();
+    const { range, includeDemo, ...filters } = parsed.data;
+    const since =
+      range === 'all'
+        ? '1970'
+        : new Date(Date.now() - (range === '7d' ? 7 : 1) * 86400000).toISOString();
+    const exporting = req.path.endsWith('/export');
+    const report = await visibilityReport(
+      store,
+      since,
+      { ...filters, ...(exporting ? { offset: 0 } : {}), includeDemo: includeDemo === 'true' },
+      exporting ? 5000 : 50,
+    );
+    if (exporting) {
+      const cell = (value: unknown) => {
+        let s = String(value ?? '');
+        if (/^\s*[=+@-]|^[\t\r\n]/.test(s)) s = `'${s}`;
+        return `"${s.replaceAll('"', '""')}"`;
+      };
+      const rows = [
+        [
+          'Visit ID',
+          'Arrived',
+          'Visitor type',
+          'Client',
+          'Provider',
+          'Identity confidence',
+          'Referring source',
+          'Supplied search query',
+          'Agent discovery statement',
+          'Goal or published function',
+          'Purpose evidence',
+          'Landing page',
+          'Latest page',
+          'Recorded paths',
+          'Activity tags',
+          'Page events',
+          'Demo',
+          'Report capped',
+        ],
+        ...report.records.map((v) => [
+          v.id,
+          v.createdAt,
+          v.kind,
+          v.client,
+          v.provider,
+          v.confidence,
+          v.source,
+          v.query,
+          v.declaredSource,
+          v.reason,
+          v.reasonBasis,
+          v.entryPath,
+          v.lastPath,
+          v.paths.join(' | '),
+          v.tags.join(' | '),
+          v.requests,
+          v.isDemo,
+          report.scope.capped,
+        ]),
+      ];
+      res
+        .type('text/csv')
+        .attachment('arrival-visibility.csv')
+        .send(rows.map((r) => r.map(cell).join(',')).join('\r\n'));
+      return;
+    }
+    res.json(report);
+  });
   app.get('/api/admin/sessions/:id', async (req, res) => {
     if (options.refreshProviderRanges) await providerRanges.refresh();
     const visit = await store.get(String(req.params.id));
@@ -637,6 +726,10 @@ export async function createApp(
           'Network operator',
           'Hosting signal (inferred)',
           'IP data source',
+          'Visitor type',
+          'Type evidence',
+          'Discovery declaration',
+          'Activity tags',
           'Provider',
           'Request client',
           'Identity confidence',
@@ -670,6 +763,10 @@ export async function createApp(
           v.network?.enrichment.source
             ? `${v.network.enrichment.source} https://db-ip.com | CC BY 4.0`
             : '',
+          v.visibility?.kind,
+          v.visibility?.kindBasis,
+          v.visibility?.declaredSource,
+          v.visibility?.tags.join('; '),
           v.attribution?.provider,
           v.attribution?.client,
           v.attribution?.confidence,

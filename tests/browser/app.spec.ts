@@ -517,7 +517,7 @@ test('a customer creates a workspace and signs back into its own dashboard', asy
   ).toBeVisible();
   await expect(page.locator('.customer-setup')).toContainText('NEXT_PUBLIC_ARRIVAL_SITE_ID=site_');
   await page.getByRole('link', { name: 'Open your dashboard' }).click();
-  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Website visibility' })).toBeVisible();
   const overview = await (await page.request.get('/api/admin/overview')).json();
   expect(overview.site.workspace).toBe('new-client');
   expect(overview.total).toBe(0);
@@ -526,7 +526,7 @@ test('a customer creates a workspace and signs back into its own dashboard', asy
   await page.reload();
   await page.getByLabel('Workspace password').fill('new-client-long-password');
   await page.getByRole('button', { name: 'Open workspace' }).click();
-  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Website visibility' })).toBeVisible();
 });
 
 test('unanswered introductions and observed fetch clients have distinct honest answer states', async ({
@@ -718,6 +718,32 @@ test('provider evidence, supplied referrals and the observed journey stay separa
   const id = await ingest('/docs');
   await ingest('/pricing');
   await page.goto('/app/attribution-evidence');
+  await expect(page.getByRole('heading', { name: 'Website visibility' })).toBeVisible();
+  await expect(page.locator('.visibility-table')).toContainText('website agent analytics');
+  await expect(page.locator('.visibility-table')).toContainText('/pricing');
+  await page.getByRole('tab', { name: 'Search queries', exact: true }).click();
+  await expect(page.locator('.visibility-table')).toContainText('/docs');
+  await page.locator('.visibility-table tbody button').first().click();
+  await expect(page.getByRole('tab', { name: 'Activity', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.locator('.visibility-table tbody tr')).toHaveCount(1);
+  const downloadVisibility = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Export visits' }).click();
+  expect((await downloadVisibility).suggestedFilename()).toBe('arrival-visibility.csv');
+  await settleMotion(page);
+  const visibilityA11y = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(summarize(visibilityA11y.violations)).toEqual([]);
+  await page.screenshot({ path: '.data/screenshots/visibility-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await settleMotion(page);
+  await page.screenshot({ path: '.data/screenshots/visibility-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/app/attribution-evidence?view=overview');
   await expect(page.getByRole('region', { name: 'Visitor context breakdowns' })).toContainText(
     'Anthropic',
   );
@@ -725,7 +751,7 @@ test('provider evidence, supplied referrals and the observed journey stay separa
   await page.getByLabel('Search visits').fill('Search indexing');
   await page.getByLabel('Filter by identity confidence').selectOption('network corroborated');
   await expect(page.locator('.visitor-cell')).toHaveCount(1);
-  await expect(page.locator('.visit-table')).toContainText('Task unknown');
+  await expect(page.locator('.visit-table')).toContainText('Search indexing');
   await expect(page.locator('.visit-table')).toContainText('/pricing');
   await page.locator('.visitor-cell').click();
   const drawer = page.getByRole('dialog', { name: 'Visit details' });

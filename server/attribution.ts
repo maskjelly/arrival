@@ -1,4 +1,4 @@
-import type { Visit, VisitAttribution } from '../src/types.ts';
+import type { Visit, VisitAttribution, TrafficType } from '../src/types.ts';
 import { providerRanges, type ProviderRanges } from './provider-ranges.ts';
 
 type Client = { name: string; provider: string; role: string; feed?: string; docs?: string };
@@ -173,7 +173,9 @@ export function referral(input: string, siteOrigin = ''): VisitAttribution['refe
   }
 }
 export function attributeVisit(
-  visit: Pick<Visit, 'userAgent' | 'ip' | 'source' | 'isDemo' | 'referrer' | 'environment'>,
+  visit: Pick<Visit, 'userAgent' | 'ip' | 'source' | 'isDemo' | 'referrer' | 'environment'> & {
+    answers?: Visit['answers'];
+  },
   ranges: ProviderRanges = providerRanges,
   siteOrigin = '',
 ): VisitAttribution {
@@ -189,7 +191,36 @@ export function attributeVisit(
     /(?:^|[\s;(])(python-requests|python-httpx|curl|wget|HeadlessChrome|Playwright|Puppeteer|Selenium|Arrival-DemoAgent)(?:[\s;/)]|$)/i.exec(
       visit.userAgent,
     )?.[1];
+  const declaredAgent = !!(
+    typeof visit.answers?.agent_name === 'string' &&
+    visit.answers.agent_name.trim() &&
+    typeof visit.answers?.objective === 'string' &&
+    visit.answers.objective.trim()
+  );
+  const trafficType: TrafficType = client
+    ? client.role === 'User-requested retrieval'
+      ? 'agent'
+      : client.role === 'Ad review'
+        ? 'automation'
+        : 'crawler'
+    : claims.length > 1
+      ? 'unidentified'
+      : declaredAgent || visit.source === 'agent'
+        ? 'agent'
+        : tool || visit.environment.webdriver === true
+          ? 'automation'
+          : 'unidentified';
   return {
+    trafficType,
+    trafficTypeBasis: client
+      ? `${client.name} declares a published ${client.role.toLowerCase()} role; identity confidence is separate.`
+      : trafficType === 'automation'
+        ? 'Automation or HTTP-client signals; AI control is not established.'
+        : trafficType === 'agent'
+          ? declaredAgent
+            ? 'Client name and task supplied in an agent declaration; self-reported.'
+            : 'Client used the agent reporting endpoint; self-reported.'
+          : 'No reliable distinction between human, disguised automation or other clients.',
     provider:
       client?.provider ??
       (claims.length
@@ -201,15 +232,19 @@ export function attributeVisit(
       client?.name ?? tool ?? (claims.length ? 'Conflicting client claims' : 'Unidentified client'),
     role:
       client?.role ??
-      (/HeadlessChrome|Playwright|Puppeteer|Selenium/i.test(tool ?? '') ||
-      visit.environment.webdriver === true
-        ? 'Browser automation'
-        : tool
-          ? 'HTTP client / script'
-          : 'Not established'),
+      (declaredAgent
+        ? 'Interactive agent (self-reported)'
+        : /HeadlessChrome|Playwright|Puppeteer|Selenium/i.test(tool ?? '') ||
+            visit.environment.webdriver === true
+          ? 'Browser automation'
+          : tool
+            ? 'HTTP client / script'
+            : 'Not established'),
     roleBasis: client
       ? 'Published client role; this does not reveal the visitor’s task.'
-      : 'Request or browser signals only.',
+      : declaredAgent
+        ? 'Client name and task supplied by the visitor; self-reported.'
+        : 'Request or browser signals only.',
     roleDocs: client?.docs,
     confidence: fresh
       ? 'network corroborated'

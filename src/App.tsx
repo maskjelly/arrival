@@ -1,3 +1,4 @@
+import Visibility, { DiscoveryTrail, TrafficBadge, visitPurpose } from './Visibility.tsx';
 import { VisitContext, Journey, ContextBreakdowns } from './VisitContext.tsx';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -126,7 +127,8 @@ const statusName = (value: string) =>
     revoked: 'Revoked',
     expired: 'Expired',
   })[value] || value;
-type View = 'overview' | 'sessions' | 'origins' | 'questions' | 'integration' | 'project';
+type View =
+  'visibility' | 'overview' | 'sessions' | 'origins' | 'questions' | 'integration' | 'project';
 
 function Brand({ light = false }: { light?: boolean }) {
   return (
@@ -239,9 +241,7 @@ function RecentVisits({
               </small>
             </span>
             <span className="recent-intent">
-              <strong className={visit.objective ? '' : 'is-unknown'}>
-                {visit.objective || 'Task unknown'}
-              </strong>
+              <strong className={visit.objective ? '' : 'is-unknown'}>{visitPurpose(visit)}</strong>
               <small>
                 {visit.attribution?.referral.source ?? 'No referrer supplied'} ·{' '}
                 {visit.journey?.lastPath ?? visit.entryPath}
@@ -272,11 +272,19 @@ export default function App() {
   const readView = () => {
     const value = new URLSearchParams(location.search).get('view');
     return (
-      ['overview', 'sessions', 'origins', 'questions', 'integration', 'project'].includes(
-        value ?? '',
-      )
+      [
+        'visibility',
+        'overview',
+        'sessions',
+        'origins',
+        'questions',
+        'integration',
+        'project',
+      ].includes(value ?? '')
         ? value
-        : 'overview'
+        : location.pathname.startsWith('/app/')
+          ? 'visibility'
+          : 'overview'
     ) as View;
   };
   const [view, setCurrentView] = useState<View>(readView);
@@ -485,6 +493,7 @@ export default function App() {
       </div>
     );
   const views: { id: View; name: string; icon: typeof Path }[] = [
+    { id: 'visibility', name: 'Visibility', icon: Eye },
     { id: 'overview', name: 'Overview', icon: ChartLineUp },
     { id: 'sessions', name: 'Visits', icon: Path },
     { id: 'origins', name: 'Origins', icon: Globe },
@@ -548,11 +557,11 @@ export default function App() {
 
         <nav aria-label="Workspace pages">
           <span className="nav-label">Analyze</span>
-          {views.slice(0, 3).map(navItem)}
+          {views.slice(0, 4).map(navItem)}
           <span className="nav-label">Configure</span>
-          {views.slice(3, 5).map(navItem)}
+          {views.slice(4, 6).map(navItem)}
           <span className="nav-label">Product</span>
-          {views.slice(5).map(navItem)}
+          {views.slice(6).map(navItem)}
         </nav>
         <div className="sidebar-note">
           <span className="sidebar-note-title">
@@ -629,33 +638,49 @@ export default function App() {
             </div>
           )}
           <div className="workspace-view" key={view}>
-            {(view === 'overview' || view === 'sessions') && (
+            {(view === 'visibility' || view === 'overview' || view === 'sessions') && (
               <>
                 <div className="page-heading">
                   <div>
                     <div className="section-context">Website analytics</div>
                     <div className="page-title-row">
-                      <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
+                      <h1>
+                        {view === 'visibility'
+                          ? 'Website visibility'
+                          : view === 'overview'
+                            ? 'Agent traffic'
+                            : 'Visit explorer'}
+                      </h1>
                       <span className="live-badge">
                         <i />
                         Live
                       </span>
                     </div>
                     <p>
-                      {view === 'overview'
-                        ? 'Who arrived, what they asked for, and the trail they left behind.'
-                        : 'Follow the task behind a visit, from check-in to the final action.'}
+                      {view === 'visibility'
+                        ? 'Understand who finds your website, what they disclose, and where they go.'
+                        : view === 'overview'
+                          ? 'Who arrived, what they asked for, and the trail they left behind.'
+                          : 'Follow the task behind a visit, from check-in to the final action.'}
                     </p>
                   </div>
                   <div className="heading-actions">
                     <RangePicker value={range} onChange={setRange} />
-                    <a className="button secondary" href="/api/admin/export?format=csv" download>
-                      <DownloadSimple size={16} />
-                      Export
-                    </a>
+                    {view !== 'visibility' && (
+                      <a className="button secondary" href="/api/admin/export?format=csv" download>
+                        <DownloadSimple size={16} />
+                        Export
+                      </a>
+                    )}
                   </div>
                 </div>
-                {view === 'overview' ? (
+                {view === 'visibility' ? (
+                  <Visibility
+                    range={range}
+                    selectVisit={setSelected}
+                    refreshKey={data.serverTime}
+                  />
+                ) : view === 'overview' ? (
                   <OverviewPage
                     data={data}
                     runDemo={runDemo}
@@ -666,6 +691,7 @@ export default function App() {
                     connectSite={() => setView('integration')}
                     editQuestions={() => setView('questions')}
                     openOrigins={() => setView('origins')}
+                    openVisibility={() => setView('visibility')}
                   />
                 ) : (
                   <VisitsPage
@@ -772,7 +798,9 @@ function OverviewPage({
   connectSite,
   editQuestions,
   openOrigins,
+  openVisibility,
 }: {
+  openVisibility: () => void;
   openOrigins: () => void;
   connectSite: () => void;
   editQuestions: () => void;
@@ -836,6 +864,15 @@ function OverviewPage({
     entry && entry.prompted ? Math.round((entry.answered / entry.prompted) * 100) : 0;
   return (
     <>
+      <div className="visibility-overview-link">
+        <div>
+          <strong>Connect the visit to its discovery.</strong>
+          <p>Explore crawlers, supplied queries, landing pages and agent goals together.</p>
+        </div>
+        <button className="text-button" onClick={openVisibility}>
+          Open visibility <ArrowRight size={15} />
+        </button>
+      </div>
       <section className="kpi-grid" aria-label="Traffic summary">
         {stats.map((stat) => (
           <article className="kpi-card" key={stat.label}>
@@ -1150,7 +1187,7 @@ function VisitTable({
           <thead>
             <tr>
               <th>Visitor</th>
-              <th>Declared objective</th>
+              <th>Goal or published function</th>
               <th>Connection origin</th>
               <th>Status</th>
               <th>Activity</th>
@@ -1168,6 +1205,7 @@ function VisitTable({
                     <Avatar visit={visit} />
                     <span>
                       <strong>{visit.agentName}</strong>
+                      {visit.visibility && <TrafficBadge kind={visit.visibility.kind} />}
                       <small>{visit.isDemo ? 'Controlled demo' : sourceName(visit.source)}</small>
                       {visit.attribution && (
                         <>
@@ -1184,7 +1222,7 @@ function VisitTable({
                 </td>
                 <td>
                   <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
-                    {visit.objective || 'Task unknown'}
+                    {visitPurpose(visit)}
                   </p>
                   <span className="visit-journey-context">
                     {visit.attribution?.referral.source} ·{' '}
@@ -1236,7 +1274,7 @@ function VisitTable({
                 <Status visit={visit} />
               </span>
               <span className={`mobile-visit-objective ${visit.objective ? '' : 'muted'}`}>
-                {visit.objective || 'Task unknown'}
+                {visitPurpose(visit)}
               </span>
               {visit.attribution && (
                 <span className="visit-client-context">
@@ -2058,8 +2096,9 @@ function VisitDrawer({
               role="region"
               aria-label="Visit details content"
             >
+              {tab === 'answers' && <DiscoveryTrail visit={visit} />}
               {(tab === 'answers' || tab === 'signals') && <VisitContext visit={visit} />}
-              {tab === 'answers' && (
+              {tab === 'answers' && (visit.visibility?.kind !== 'crawler' || hasAnswers) && (
                 <>
                   {visit.objective ? (
                     <div className="objective-block">

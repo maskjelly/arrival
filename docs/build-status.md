@@ -2,6 +2,8 @@
 
 ## Implemented
 
+- Connected Visibility report: crawler/agent categories, discovery evidence, supplied queries, landing pages, activity tags, drilldowns and filtered CSV; explicitly capped at 5,000 visits. See [visibility](visibility.md).
+
 - Natural page entry: questions for recognized interactive agents, forms/GET submissions, original destination, site-bound one-hour passes.
 - Cooperative browser automation handoff to the same introduction; no repeated browser questionnaire after completion.
 - Customer workspace creation/sign-in, site-scoped ingestion keys, scoped records/reports/exports.

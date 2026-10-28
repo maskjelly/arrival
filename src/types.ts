@@ -81,7 +81,10 @@ export type NetworkStatus = {
   };
   errors: string[];
 };
+export type TrafficType = 'crawler' | 'agent' | 'automation' | 'unidentified';
 export type VisitAttribution = {
+  trafficType?: TrafficType;
+  trafficTypeBasis?: string;
   provider: string;
   client: string;
   role: string;
@@ -130,6 +133,7 @@ export type Visit = {
   network?: NetworkContext;
   attribution?: VisitAttribution;
   journey?: ObservedJourney;
+  visibility?: VisitVisibility;
   referrer: string;
   entryPath: string;
   agentName: string;
@@ -190,4 +194,93 @@ export type Overview = {
     status: NetworkStatus;
   };
   serverTime: string;
+};
+
+export type VisitVisibility = {
+  kind: TrafficType;
+  kindBasis: string;
+  source: string;
+  sourceKind: string;
+  query?: string;
+  queryState: 'supplied' | 'not supplied';
+  declaredSource: string;
+  reason: string;
+  reasonBasis: 'declared' | 'published role' | 'not established';
+  entryPath: string;
+  lastPath: string;
+  paths: string[];
+  tags: string[];
+};
+export type VisibilityRecord = VisitVisibility & {
+  id: string;
+  createdAt: string;
+  client: string;
+  provider: string;
+  confidence: VisitAttribution['confidence'];
+  isDemo: boolean;
+  requests: number;
+};
+export type VisibilityFilters = {
+  client?: string;
+  kind?: TrafficType;
+  provider?: string;
+  source?: string;
+  query?: string;
+  page?: string;
+  search?: string;
+  includeDemo?: boolean;
+  offset?: number;
+};
+export type VisibilityReport = {
+  scope: {
+    since: string;
+    scanned: number;
+    capped: boolean;
+    limit: number;
+    excludedDemos: number;
+    includeDemo: boolean;
+  };
+  totals: {
+    visits: number;
+    crawlers: number;
+    agents: number;
+    automation: number;
+    unidentified: number;
+    withSource: number;
+    withQuery: number;
+    withDeclaration: number;
+    requests: number;
+  };
+  providerOptions: string[];
+  providers: {
+    provider: string;
+    client: string;
+    kind: TrafficType;
+    role: string;
+    visits: number;
+    requests: number;
+    pages: number;
+    latest: string;
+  }[];
+  queries: {
+    query: string;
+    source: string;
+    kind: TrafficType;
+    page: string;
+    visits: number;
+    providers: string[];
+  }[];
+  pages: {
+    path: string;
+    visits: number;
+    crawlers: number;
+    agents: number;
+    providers: string[];
+    queries: string[];
+    latest: string;
+  }[];
+  sources: { source: string; kind: string; visits: number; queries: number }[];
+  records: VisibilityRecord[];
+  offset: number;
+  hasMore: boolean;
 };

@@ -1,6 +1,6 @@
 # Arrival
 
-Agent introductions and website analytics. An agent follows a normal link to your website, meets a short question step, then continues to its original destination. The customer sees declared intent alongside observed requests, country/state estimates, network ownership, provider evidence, crawler roles, referral sources and observed journeys.
+Website visibility for agent and crawler traffic. Connect who arrived, where they came from, what they disclosed and which pages they visited. Interactive agents can answer a short introduction; fetch-only clients keep reading.
 
 ## Use
 
@@ -9,6 +9,7 @@ Create a customer workspace at `/start`. Install the versioned Next.js package a
 - Server entry for recognized interactive agents; an expiring, site-bound pass avoids repeated questions.
 - Browser-reported automation can use the same introduction. Human-looking clients cannot be detected reliably.
 - Native forms and URL-based submissions support different agent tools. No user-supplied test instructions are required for discovery.
+- Connected visibility reports: crawler/agent categories, provider confidence, supplied search queries, landing pages, activity tags, filters and CSV.
 - Country/state/ASN analytics and a questions → answers → continuation funnel.
 - Isolated customer workspaces, password sign-in, scoped ingestion keys, JSON/CSV exports.
 - Local SQLite or durable Turso storage on Vercel. IP lookup uses local DB-IP Lite datasets.
@@ -35,6 +36,6 @@ npm run check
 
 React, TypeScript, Vite, Express, SQLite/Turso, Zod, Manrope and native CSS. No model key is required.
 
-[Customer installation](packages/next/README.md) · [Architecture](docs/architecture.md) · [Vercel](docs/vercel.md) · [Network data](docs/network-data.md) · [Build status](docs/build-status.md)
+[Customer installation](packages/next/README.md) · [Architecture](docs/architecture.md) · [Visibility evidence](docs/visibility.md) · [Vercel](docs/vercel.md) · [Network data](docs/network-data.md) · [Build status](docs/build-status.md)
 
 Provider evidence combines client headers with current official IP ranges for OpenAI, Anthropic, Perplexity, Google and Bing. Range checks refresh automatically on dashboard reads; visitor requests never wait for them. A matching range corroborates the network, not the human user or private prompt. Search terms appear only when supplied in a recognized referring search URL.

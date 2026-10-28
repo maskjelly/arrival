@@ -1,3 +1,4 @@
+import { visitVisibility } from './visibility.ts';
 import { identify } from './signals.ts';
 import { attributeVisit } from './attribution.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -335,6 +336,7 @@ export class Store {
       if (visit.classification === 'unknown') visit.classification = requestClient.classification;
     }
     visit.attribution = attributeVisit(visit, undefined, String(row.site_origin ?? ''));
+    visit.visibility = visitVisibility(visit);
     return visit;
   }
   async get(id: string) {

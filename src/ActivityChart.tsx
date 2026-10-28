@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ClientMark } from './ClientMark.tsx';
 import type { Overview } from './types.ts';
 import './analytics.css';
+import { useChartPaths } from './motion.ts';
 type Point = Overview['chart'][number];
 const number = (v: number) =>
   new Intl.NumberFormat('en', { notation: v > 9999 ? 'compact' : 'standard' }).format(v);
@@ -28,6 +29,17 @@ export function ActivityChart({
     () => [...new Set(points.flatMap((p) => Object.keys(p.clients ?? {})))].sort(),
     [points],
   );
+  const leadingClients = useMemo(
+    () =>
+      clients
+        .map((name) => ({
+          name,
+          total: points.reduce((sum, point) => sum + (point.clients?.[name]?.visits ?? 0), 0),
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 3),
+    [clients, points],
+  );
   const selected = clients.includes(client) ? client : '';
   const chart = points.map((p) => ({
     ...p,
@@ -44,7 +56,65 @@ export function ActivityChart({
   const y = (value: number) => top + (height - top - bottom) * (1 - value / maximum);
   const line = (key: 'events' | 'visits') =>
     chart.map((p, i) => `${i ? 'L' : 'M'}${x(i)},${y(p[key])}`).join(' ');
+  const eventPath = useRef<SVGPathElement>(null),
+    visitPath = useRef<SVGPathElement>(null),
+    areaPath = useRef<SVGPathElement>(null);
+  const paths = {
+    events: line('events'),
+    visits: line('visits'),
+    area: `${line('events')} L${x(chart.length - 1)},${y(0)} L${x(0)},${y(0)} Z`,
+  };
+  useChartPaths(
+    { events: eventPath, visits: visitPath, area: areaPath },
+    paths,
+    `${width}:${height}`,
+  );
   const point = active === null ? undefined : chart[active];
+  const lastPoint = useRef(point);
+  if (point) {
+    lastPoint.current = point;
+  }
+  const shownPoint = point ?? lastPoint.current;
+  const tooltipLayout = useRef(small);
+  const tooltipPosition = useRef<HTMLDivElement>(null),
+    plot = useRef<HTMLDivElement>(null),
+    wasOpen = useRef(false);
+  useLayoutEffect(() => {
+    if (!point || active === null || !plot.current || !tooltipPosition.current) {
+      wasOpen.current = false;
+      return;
+    }
+    const position = tooltipPosition.current;
+    const update = () => {
+      const plotWidth = plot.current!.clientWidth,
+        tipWidth = position.offsetWidth;
+      const offset = small
+        ? (plotWidth - tipWidth) / 2
+        : Math.max(12, Math.min(plotWidth - tipWidth - 12, (x(active) / width) * plotWidth + 14));
+      position.style.transform = `translate3d(${offset}px,0,0)`;
+    };
+    const layoutChanged = tooltipLayout.current !== small;
+    tooltipLayout.current = small;
+    if (!wasOpen.current || layoutChanged) {
+      position.style.transition = 'none';
+      update();
+      position.getBoundingClientRect();
+      position.style.transition = '';
+    } else update();
+    wasOpen.current = true;
+    let observedWidth = plot.current.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (plot.current!.clientWidth === observedWidth) return;
+      observedWidth = plot.current!.clientWidth;
+      position.style.transition = 'none';
+      update();
+      position.getBoundingClientRect();
+      position.style.transition = '';
+    });
+    observer.observe(plot.current);
+    return () => observer.disconnect();
+  }, [active, small, width, !!point]);
+
   const label = (value: string) =>
     new Date(value).toLocaleString(
       'en-GB',
@@ -85,7 +155,7 @@ export function ActivityChart({
           </select>
         </label>
       </div>
-      <div className="activity-plot" onPointerLeave={() => setActive(null)}>
+      <div className="activity-plot" ref={plot} onPointerLeave={() => setActive(null)}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
@@ -120,43 +190,37 @@ export function ActivityChart({
           ))}
           {!empty && chart.length > 0 && (
             <>
+              <path ref={areaPath} d={paths.area} fill={`url(#fill${id})`} />
               <path
-                d={`${line('events')} L${x(chart.length - 1)},${y(0)} L${x(0)},${y(0)} Z`}
-                fill={`url(#fill${id})`}
-              />
-              <path
-                d={line('visits')}
+                ref={visitPath}
+                d={paths.visits}
                 fill="none"
                 stroke="#918b86"
                 strokeWidth="1.8"
                 strokeDasharray="5 5"
               />
               <path
-                d={line('events')}
+                ref={eventPath}
+                d={paths.events}
                 fill="none"
                 stroke="#b53b65"
                 strokeWidth="2.5"
                 strokeLinejoin="round"
               />
               {point && active !== null && (
-                <>
-                  <line
-                    x1={x(active)}
-                    x2={x(active)}
-                    y1={top}
-                    y2={y(0)}
-                    stroke="#827c77"
-                    strokeDasharray="4 5"
-                  />
+                <g className="chart-probe" style={{ transform: `translateX(${x(active)}px)` }}>
+                  <line x1="0" x2="0" y1={top} y2={y(0)} stroke="#827c77" strokeDasharray="4 5" />
                   <circle
-                    cx={x(active)}
-                    cy={y(point.events)}
+                    className="chart-probe-dot"
+                    style={{ transform: `translateY(${y(point.events)}px)` }}
+                    cx="0"
+                    cy="0"
                     r="5"
                     fill="white"
                     stroke="#b53b65"
                     strokeWidth="3"
                   />
-                </>
+                </g>
               )}
             </>
           )}
@@ -196,41 +260,40 @@ export function ActivityChart({
             <p>Your first visit will put this chart to work.</p>
           </div>
         )}
-        {point && active !== null && (
-          <div
-            className={`activity-tooltip ${active > chart.length * 0.6 ? 'tooltip-left' : ''}`}
-            role="status"
-            style={{ left: `${Math.min(76, Math.max(4, (x(active) / width) * 100))}%` }}
-          >
-            <strong>
-              {new Date(point.time).toLocaleString('en-GB', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </strong>
-            <div>
-              <span>Visits</span>
-              <b>{number(point.visits)}</b>
-            </div>
-            <div>
-              <span>Events</span>
-              <b>{number(point.events)}</b>
-            </div>
-            {!selected &&
-              Object.entries(point.clients ?? {})
-                .sort((a, b) => b[1].visits - a[1].visits)
-                .slice(0, 3)
-                .map(([name, data]) => (
+        {shownPoint && (
+          <div className="activity-tooltip-position" ref={tooltipPosition} aria-hidden={!point}>
+            <div
+              className="activity-tooltip"
+              data-open={!!point}
+              role={point ? 'status' : undefined}
+            >
+              <strong>
+                {new Date(shownPoint.time).toLocaleString('en-GB', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </strong>
+              <div>
+                <span>Visits</span>
+                <b>{number(shownPoint.visits)}</b>
+              </div>
+              <div>
+                <span>Events</span>
+                <b>{number(shownPoint.events)}</b>
+              </div>
+              {!selected &&
+                leadingClients.map(({ name }) => (
                   <div className="tooltip-client" key={name}>
                     <span>
                       <ClientMark name={name} size={14} />
                       {name}
                     </span>
-                    <b>{data.visits}</b>
+                    <b>{shownPoint.clients?.[name]?.visits ?? 0}</b>
                   </div>
                 ))}
+            </div>
           </div>
         )}
       </div>

@@ -1,0 +1,209 @@
+:root {
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-travel: cubic-bezier(0.32, 0.72, 0, 1);
+}
+html {
+  scroll-behavior: smooth;
+}
+.workspace-view {
+  animation: view-arrive 180ms var(--ease-soft) both;
+}
+.drawer-content {
+  animation: content-arrive 150ms var(--ease-soft) both;
+}
+.marketing .m-demo-body {
+  animation: content-arrive 200ms var(--ease-soft) both;
+}
+.app-shell .toast {
+  animation: toast-arrive 220ms var(--ease-soft) both;
+}
+.chart-probe,
+.chart-probe-dot {
+  transition: transform 100ms var(--ease-soft);
+}
+.activity-tooltip-position {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 34px;
+  width: 225px;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+  transition: transform 140ms var(--ease-soft);
+}
+.activity-tooltip-position .activity-tooltip {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: 100%;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px) scale(0.985);
+  transform-origin: top center;
+  transition:
+    opacity 110ms ease,
+    transform 150ms var(--ease-soft),
+    visibility 0s 150ms;
+}
+.activity-tooltip-position .activity-tooltip[data-open='true'] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 110ms ease,
+    transform 150ms var(--ease-soft),
+    visibility 0s;
+}
+.app-shell .rank-fill {
+  transform-origin: left center;
+  transition: transform 240ms var(--ease-soft);
+}
+.app-shell .sidebar {
+  transition:
+    transform 260ms var(--ease-travel),
+    visibility 260ms;
+}
+.app-shell .button,
+.marketing .m-button,
+.onboarding .button,
+.login-screen .button {
+  transition:
+    transform 140ms var(--ease-soft),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+.app-shell .button:active,
+.marketing .m-button:active,
+.onboarding .button:active,
+.login-screen .button:active {
+  transform: translateY(1px) scale(0.985);
+}
+.app-shell .visit-table tbody tr,
+.app-shell .mobile-visit-card,
+.app-shell .source-row,
+.app-shell .overview-location-list > div {
+  transition: background-color 140ms ease;
+}
+.visit-drawer::backdrop {
+  animation: backdrop-arrive 200ms ease both;
+}
+.visit-drawer[data-closing='true']::backdrop {
+  animation: backdrop-leave 140ms ease both;
+}
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .visit-table tbody tr:hover,
+  .app-shell .mobile-visit-card:hover,
+  .app-shell .source-row:hover,
+  .app-shell .overview-location-list > div:hover {
+    background-color: #fdf8fa;
+  }
+  .marketing .m-button:hover,
+  .app-shell .button.primary:hover {
+    box-shadow:
+      inset 0 1px 0 #ffffff25,
+      0 3px 8px #29262413;
+  }
+}
+@keyframes view-arrive {
+  from {
+    opacity: 0.45;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes content-arrive {
+  from {
+    opacity: 0.35;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes toast-arrive {
+  from {
+    opacity: 0;
+    translate: 0 5px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes backdrop-arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes backdrop-leave {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (max-width: 650px) {
+  .activity-tooltip-position {
+    width: 180px;
+    top: 8px;
+  }
+}
+/* Precision and accessibility take precedence over motion. */
+html[data-input='keyboard'] {
+  scroll-behavior: auto;
+}
+html[data-input='keyboard'] .chart-probe,
+html[data-input='keyboard'] .chart-probe-dot,
+html[data-input='keyboard'] .activity-tooltip-position,
+html[data-input='keyboard'] .activity-tooltip-position .activity-tooltip {
+  transition: none;
+}
+html[data-input='keyboard'] .workspace-view,
+html[data-input='keyboard'] .drawer-content,
+html[data-input='keyboard'] .m-demo-body {
+  animation: none;
+}
+html[data-input='keyboard'] .button:active,
+html[data-input='keyboard'] .m-button:active {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .workspace-view,
+  .drawer-content,
+  .marketing .m-demo-body,
+  .app-shell .toast,
+  .visit-drawer::backdrop {
+    animation: none !important;
+  }
+  .chart-probe,
+  .chart-probe-dot,
+  .activity-tooltip-position,
+  .activity-tooltip-position .activity-tooltip,
+  .app-shell .rank-fill,
+  .app-shell .sidebar,
+  .app-shell .button,
+  .marketing .m-button,
+  .onboarding .button,
+  .login-screen .button {
+    transition: none !important;
+  }
+  .app-shell .button:active,
+  .marketing .m-button:active,
+  .onboarding .button:active,
+  .login-screen .button:active {
+    transform: none;
+  }
+}

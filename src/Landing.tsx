@@ -167,7 +167,7 @@ export default function Landing() {
                   Read-only fetch
                 </button>
               </div>
-              <div className="m-demo-body">
+              <div className="m-demo-body" key={`${mode}:${step}`}>
                 {step === 0 ? (
                   <>
                     <span className="m-agent-symbol">

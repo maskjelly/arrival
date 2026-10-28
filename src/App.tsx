@@ -28,6 +28,7 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
+import { motionIsInstant, softEase } from './motion.ts';
 import { ActivityChart } from './ActivityChart.tsx';
 import { ClientMark } from './ClientMark.tsx';
 import { CustomerSetup } from './CustomerSetup.tsx';
@@ -522,98 +523,100 @@ export default function App() {
               </button>
             </div>
           )}
-          {(view === 'overview' || view === 'sessions') && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <div className="section-context">Website analytics</div>
-                  <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
-                  <p>
-                    {view === 'overview'
-                      ? 'A little context for everyone stopping by.'
-                      : 'Follow the task behind a visit, from check-in to the final action.'}
-                  </p>
+          <div className="workspace-view" key={view}>
+            {(view === 'overview' || view === 'sessions') && (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <div className="section-context">Website analytics</div>
+                    <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
+                    <p>
+                      {view === 'overview'
+                        ? 'A little context for everyone stopping by.'
+                        : 'Follow the task behind a visit, from check-in to the final action.'}
+                    </p>
+                  </div>
+                  <div className="heading-actions">
+                    <select
+                      aria-label="Date range"
+                      value={range}
+                      onChange={(e) => setRange(e.target.value)}
+                    >
+                      <option value="24h">Last 24 hours</option>
+                      <option value="7d">Last 7 days</option>
+                      <option value="all">All time</option>
+                    </select>
+                    <a className="button secondary" href="/api/admin/export?format=csv" download>
+                      <DownloadSimple size={17} />
+                      Export
+                    </a>
+                  </div>
                 </div>
-                <div className="heading-actions">
-                  <select
-                    aria-label="Date range"
-                    value={range}
-                    onChange={(e) => setRange(e.target.value)}
-                  >
-                    <option value="24h">Last 24 hours</option>
-                    <option value="7d">Last 7 days</option>
-                    <option value="all">All time</option>
-                  </select>
-                  <a className="button secondary" href="/api/admin/export?format=csv" download>
-                    <DownloadSimple size={17} />
-                    Export
-                  </a>
+                {view === 'overview' ? (
+                  <OverviewPage
+                    data={data}
+                    runDemo={runDemo}
+                    demoBusy={demoBusy}
+                    selectVisit={setSelected}
+                    showVisits={() => setView('sessions')}
+                    range={range}
+                    connectSite={() => setView('integration')}
+                    editQuestions={() => setView('questions')}
+                    openOrigins={() => setView('origins')}
+                  />
+                ) : (
+                  <VisitsPage
+                    data={data}
+                    selectVisit={setSelected}
+                    runDemo={runDemo}
+                    demoBusy={demoBusy}
+                  />
+                )}
+              </>
+            )}
+            {view === 'origins' && data.network && (
+              <OriginsPage
+                data={data}
+                selectVisit={setSelected}
+                setup={() => setView('integration')}
+                range={range}
+                onRangeChange={setRange}
+              />
+            )}
+            {view === 'questions' && (
+              <QuestionsPage
+                site={data.site}
+                save={async (next) => {
+                  await api('/admin/site', { method: 'PUT', body: JSON.stringify(next) });
+                  await reload();
+                  tell('Questions saved. New visits will use the updated version.');
+                }}
+              />
+            )}
+            {view === 'integration' && (
+              <IntegrationPage
+                site={data.site}
+                copy={copy}
+                save={async (next) => {
+                  await api('/admin/site', { method: 'PUT', body: JSON.stringify(next) });
+                  await reload();
+                  tell('Website settings saved.');
+                }}
+              />
+            )}
+            {view === 'project' && (
+              <>
+                <div className="page-heading">
+                  <div>
+                    <div className="section-context">The current build</div>
+                    <h1>Built, and still to build.</h1>
+                    <p>The implementation, its limits, and the stack underneath.</p>
+                  </div>
                 </div>
-              </div>
-              {view === 'overview' ? (
-                <OverviewPage
-                  data={data}
-                  runDemo={runDemo}
-                  demoBusy={demoBusy}
-                  selectVisit={setSelected}
-                  showVisits={() => setView('sessions')}
-                  range={range}
-                  connectSite={() => setView('integration')}
-                  editQuestions={() => setView('questions')}
-                  openOrigins={() => setView('origins')}
-                />
-              ) : (
-                <VisitsPage
-                  data={data}
-                  selectVisit={setSelected}
-                  runDemo={runDemo}
-                  demoBusy={demoBusy}
-                />
-              )}
-            </>
-          )}
-          {view === 'origins' && data.network && (
-            <OriginsPage
-              data={data}
-              selectVisit={setSelected}
-              setup={() => setView('integration')}
-              range={range}
-              onRangeChange={setRange}
-            />
-          )}
-          {view === 'questions' && (
-            <QuestionsPage
-              site={data.site}
-              save={async (next) => {
-                await api('/admin/site', { method: 'PUT', body: JSON.stringify(next) });
-                await reload();
-                tell('Questions saved. New visits will use the updated version.');
-              }}
-            />
-          )}
-          {view === 'integration' && (
-            <IntegrationPage
-              site={data.site}
-              copy={copy}
-              save={async (next) => {
-                await api('/admin/site', { method: 'PUT', body: JSON.stringify(next) });
-                await reload();
-                tell('Website settings saved.');
-              }}
-            />
-          )}
-          {view === 'project' && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <div className="section-context">The current build</div>
-                  <h1>Built, and still to build.</h1>
-                  <p>The implementation, its limits, and the stack underneath.</p>
-                </div>
-              </div>
-              <BuildStatus />
-            </>
-          )}
+                <BuildStatus />
+              </>
+            )}
+          </div>
           <footer className="app-footer">
             <span>
               Refreshes every 5 seconds
@@ -763,7 +766,10 @@ function OverviewPage({
                 <div className="source-row" key={source.name}>
                   <span
                     className="rank-fill"
-                    style={{ width: `${(source.count / Math.max(1, data.stats.visits)) * 100}%` }}
+                    style={{
+                      width: '100%',
+                      transform: `scaleX(${source.count / Math.max(1, data.stats.visits)})`,
+                    }}
                   />
                   <ClientMark name={source.name} />
                   <strong>{source.name}</strong>
@@ -805,7 +811,10 @@ function OverviewPage({
                   <div key={place.name + String(i)}>
                     <span
                       className="rank-fill"
-                      style={{ width: `${(place.count / Math.max(1, data.stats.visits)) * 100}%` }}
+                      style={{
+                        width: '100%',
+                        transform: `scaleX(${place.count / Math.max(1, data.stats.visits)})`,
+                      }}
                     />
                     <span className="country-code">
                       {'code' in place ? place.code : place.countryCode}
@@ -1665,6 +1674,29 @@ function VisitDrawer({
   copy: (value: string) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const animation = useRef<Animation | null>(null),
+    closing = useRef(false);
+  const dismiss = () => {
+    if (closing.current) return;
+    if (motionIsInstant() || !dialog.current) {
+      close();
+      return;
+    }
+    closing.current = true;
+    dialog.current.dataset.closing = 'true';
+    const element = dialog.current,
+      current = getComputedStyle(element);
+    animation.current?.cancel();
+    const exit = element.animate(
+      [
+        { opacity: current.opacity, transform: current.transform },
+        { opacity: 0, transform: 'translateX(16px)' },
+      ],
+      { duration: 140, easing: softEase, fill: 'forwards' },
+    );
+    animation.current = exit;
+    exit.onfinish = close;
+  };
   const [detail, setDetail] = useState<{ visit: Visit; events: VisitEvent[] }>();
   const [tab, setTab] = useState(initialTab),
     [error, setError] = useState(''),
@@ -1677,9 +1709,18 @@ function VisitDrawer({
     const previousFocus = document.activeElement;
     const element = dialog.current;
     element?.showModal();
+    if (element && !motionIsInstant())
+      animation.current = element.animate(
+        [
+          { opacity: 0, transform: 'translateX(20px)' },
+          { opacity: 1, transform: 'translateX(0)' },
+        ],
+        { duration: 240, easing: softEase },
+      );
     const interval = setInterval(() => void load().catch(() => {}), 5000);
     return () => {
       clearInterval(interval);
+      animation.current?.cancel();
       element?.close();
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
         previousFocus.focus({ preventScroll: true });
@@ -1697,7 +1738,7 @@ function VisitDrawer({
       ref={dialog}
       onCancel={(event) => {
         event.preventDefault();
-        close();
+        dismiss();
       }}
       onClick={(e) => {
         if (e.target === dialog.current) {
@@ -1708,7 +1749,7 @@ function VisitDrawer({
             e.clientY < rect.top ||
             e.clientY > rect.bottom
           )
-            close();
+            dismiss();
         }
       }}
       aria-label="Visit details"
@@ -1716,7 +1757,7 @@ function VisitDrawer({
       <div className="drawer-shell">
         <header className="drawer-top">
           <span>Visit details</span>
-          <button className="icon-button" aria-label="Close visit details" onClick={close}>
+          <button className="icon-button" aria-label="Close visit details" onClick={dismiss}>
             <X size={21} />
           </button>
         </header>
@@ -1780,6 +1821,7 @@ function VisitDrawer({
             </div>
             <div
               className="drawer-content"
+              key={tab}
               tabIndex={0}
               role="region"
               aria-label="Visit details content"

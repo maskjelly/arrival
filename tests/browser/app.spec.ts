@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { installSnippet } from '../../src/install.ts';
@@ -8,6 +8,19 @@ const summarize = (violations: any[]) =>
     id: v.id,
     nodes: v.nodes.map((n: any) => ({ target: n.target, reason: n.failureSummary })),
   }));
+
+// Contrast is checked after finite presentation transitions; functional tests still interact mid-motion.
+const settleMotion = (page: Page) =>
+  page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) =>
+          Number.isFinite(Number(animation.effect?.getComputedTiming().iterations)),
+        )
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
 
 test('public landing explains a natural agent arrival and demonstrates the introduction', async ({
   page,
@@ -29,6 +42,7 @@ test('public landing explains a natural agent arrival and demonstrates the intro
   expect(ownerRequests).toEqual([]);
   mkdirSync('.data/screenshots', { recursive: true });
   await page.screenshot({ path: '.data/screenshots/landing-desktop.png', fullPage: true });
+  await settleMotion(page);
   const a11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   expect(summarize(a11y.violations)).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -305,6 +319,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
   for (const view of ['overview', 'sessions', 'origins', 'questions', 'integration', 'project']) {
     await page.goto('/app?view=' + view);
     await expect(page.locator('.page-heading h1')).toBeVisible();
+    await settleMotion(page);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
       .analyze();
@@ -342,6 +357,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
   await expect(page.getByRole('button', { name: 'Toggle navigation', exact: true })).toBeFocused();
   expect(await page.locator('.app-body').getAttribute('inert')).toBeNull();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await settleMotion(page);
   const mobile = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
@@ -352,6 +368,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
   await expect(drawer).toBeVisible();
   for (const tab of ['Task & answers', 'Network', 'Activity', 'Signals', 'Raw data']) {
     await drawer.getByRole('button', { name: tab, exact: tab !== 'Activity' }).click();
+    await settleMotion(page);
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
       .analyze();
@@ -460,6 +477,7 @@ test('populated origins and long IPv6 connection details stay readable and acces
   await expect(country).toBeVisible();
   await country.click();
   await expect(country).toHaveAttribute('aria-pressed', 'true');
+  await settleMotion(page);
   let results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
@@ -473,6 +491,7 @@ test('populated origins and long IPv6 connection details stay readable and acces
   await expect(drawer).toContainText('Cloudflare network · inferred');
   await expect(drawer).toContainText('HTTP/2.0 at host server');
   await page.setViewportSize({ width: 390, height: 844 });
+  await settleMotion(page);
   results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
   expect(summarize(results.violations)).toEqual([]);
   expect(await drawer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -589,4 +608,66 @@ test('reference-style charts filter clients and expose real bucket values by key
   const tip = await page.getByRole('status').boundingBox();
   expect(tip!.x).toBeGreaterThanOrEqual(0);
   expect(tip!.x + tip!.width).toBeLessThanOrEqual(390);
+});
+
+test('chart motion retargets cleanly, keeps tooltip values current and honors reduced motion', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const select = page.getByLabel('Chart client', { exact: true }),
+    line = page.locator('.activity-plot > svg path[stroke="#b53b65"]');
+  const all = await line.getAttribute('d');
+  await select.selectOption('Claude-User');
+  const claude = await line.getAttribute('d');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.mouse.move(10, 10);
+  await select.selectOption('');
+  await expect(line).toHaveAttribute('d', all!);
+  for (const name of ['ChatGPT-User', 'Claude-User', '', 'ChatGPT-User', 'Claude-User'])
+    await select.selectOption(name);
+  await expect(line).toHaveAttribute('d', claude!);
+  const cells = page.locator('.activity-plot > svg > rect');
+  await cells.first().hover();
+  await cells.last().hover();
+  const tooltip = page.getByRole('status');
+  await expect(tooltip.getByText('17', { exact: true })).toBeVisible();
+  await page.mouse.move(10, 10);
+  await expect(tooltip).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await select.selectOption('');
+  expect(await line.getAttribute('d')).toBe(all);
+  await page.getByRole('slider', { name: 'Inspect time bucket' }).focus();
+  await page.keyboard.press('Home');
+  expect(
+    await page.locator('.chart-probe').evaluate((el) => getComputedStyle(el).transitionDuration),
+  ).toBe('0s');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.activity-plot > svg')).toHaveAttribute('viewBox', '0 0 360 200');
+  // ResizeObserver and media-query layout updates settle after the viewport event.
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true);
+});
+
+test('visit drawers can be dismissed immediately while their entrance is running', async ({
+  page,
+}) => {
+  await page.goto('/app');
+  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  const data = await (await page.request.get('/api/admin/overview')).json();
+  if (!data.total) await page.request.post('/api/admin/run-demo');
+  await page
+    .getByRole('link', { name: /Visits/ })
+    .first()
+    .click();
+  await page.locator('.visitor-cell').first().click();
+  const dialog = page.getByRole('dialog', { name: 'Visit details' });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.locator('.visitor-cell').first().click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close visit details' }).click();
+  await expect(dialog).toHaveCount(0);
 });

@@ -65,6 +65,8 @@
   box-shadow: 0 1px 2px #29262408;
 }
 .activity-plot {
+  overflow-x: clip;
+  overflow-y: visible;
   position: relative;
   padding: 15px 18px 0;
   min-width: 0;
@@ -87,9 +89,6 @@
   box-shadow: 0 12px 32px #29262412;
   font-size: 12px;
   pointer-events: none;
-}
-.activity-tooltip.tooltip-left {
-  transform: translateX(-85%);
 }
 .activity-tooltip > strong {
   display: block;
@@ -905,11 +904,6 @@
 }
 
 @media (max-width: 650px) {
-  .activity-tooltip {
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    top: 8px;
-  }
   .activity-plot > svg {
     min-height: 0;
   }

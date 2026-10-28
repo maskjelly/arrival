@@ -1,60 +1,61 @@
-# Arrival architecture
+# Architecture
 
-Arrival is an observability layer. A website's content stays available while visitors optionally share task context. Detection, declared intent, observed activity and access control are separate concepts.
+Arrival meets an agent at the client website, not in a task-specific testing portal. The question step is part of requesting the page. The original task and destination stay intact.
 
 ```mermaid
-flowchart LR
-  B[Browser visiting host website] --> T[Async tracker]
-  T --> C[Origin-restricted collector]
-  A[Cooperative HTTP agent] --> M[Public questions and protocol]
-  M --> D[Optional declaration collector]
-  H[Host server or proxy] --> I[Private-key request ingestion]
-  C --> DB[(SQLite)]
-  D --> DB
-  I --> DB
-  DB --> UI[Owner workspace and exports]
+sequenceDiagram
+  participant Agent
+  participant Client as Client entry middleware
+  participant Arrival
+  Agent->>Client: GET original page
+  Client->>Client: Classify request / validate clearance
+  Client->>Arrival: Start introduction (site key, bounded request evidence)
+  Arrival-->>Client: Question snapshot + visit challenge
+  Client-->>Agent: HTTP 200 introduction, content withheld
+  Agent->>Client: Answer form (POST or URL GET)
+  Client->>Arrival: Validate answers for this visit
+  Arrival-->>Client: Accepted
+  Client-->>Agent: Expiring site-bound pass, original destination
+  Agent->>Client: Continue original task
+  Client-->>Agent: Website content
+  Client->>Arrival: Background request / continuation evidence
 ```
 
-## Browser collection
+## Modules
 
-A public script and site ID install without a package or private key. The optional static manifest link exposes question discovery in the original HTML. `public/tracker.js` reports page views, bounded environment hints, scroll milestones, visibility and explicitly annotated clicks. It observes pathname changes through browser history, skips query-only changes, prevents duplicate initialization and resumes the server-issued visit token from per-tab session storage.
+| Module                                           | Responsibility                                                                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/next/core.mjs`                         | Web-standard entry protocol, warm HTML form, GET/POST answers, encrypted state/clearance, original URL preservation and best-effort reporting |
+| `packages/next/next.mjs`                         | Thin Next.js response adapter, private environment and trusted Vercel client IP                                                               |
+| `packages/next/client.mjs` / `public/tracker.js` | Browser context, route observations and cooperative automation detection; no second questionnaire after server introduction                   |
+| `server/entry.ts`                                | Authenticated introduction start/answer endpoints; snapshot validation; entry funnel events                                                   |
+| `server/workspaces.ts`                           | Workspace creation and salted scrypt password verification                                                                                    |
+| `server/store.ts`                                | Persistent records and per-request tenant scope via AsyncLocalStorage                                                                         |
+| `server/database.ts`                             | Awaited local SQLite or fetch-only remote libSQL transport                                                                                    |
+| `server/network.ts` / `server/geo.ts`            | IP normalization/provenance, header allowlist, offline location/ASN and inferred hosting                                                      |
+| `src/Onboarding.tsx` / `src/CustomerSetup.tsx`   | The standard customer setup, versioned package, environment and middleware instructions                                                       |
+| `src/App.tsx` / `src/Network.tsx`                | Private customer visits, entry funnel, questions and country/state/network analytics                                                          |
 
-Suspected automation can see a collapsed, nonmodal prompt. It never takes focus, hides content or changes website authorization. Dismissal persists for the tab; answered visits are not prompted again. Required question fields only constrain voluntary submissions. `window.arrival` exposes readiness, explicit check-in, answers, annotated actions and a per-page disable switch. The initial browser session allows ten seconds for a hosted cold start; subsequent reports time out after four seconds. Reporting errors are contained.
+## Entry and evidence
 
-The browser endpoint accepts the site's configured exact origin and the collector's own origin for its hosted optional questionnaire. CORS and a public token are abuse-reduction mechanisms, not cryptographic caller verification. An HTTP client can forge public telemetry.
+The integration recognizes common agent user agents; known search indexers pass through with logging. A browser reporting `navigator.webdriver` can request the same introduction. Neither signal verifies identity, and clients impersonating ordinary browsers can evade this coverage. The browser must execute the SDK script for its automation signal to be seen.
 
-## HTTP agent discovery and declarations
+For matched agents, the middleware returns the question document rather than the requested body. It does not depend on an agent following robots.txt, noticing a footer or being told about Arrival by the human. Clients can submit a normal form or an encoded URL. GET answers trade tool compatibility for query visibility in host logs; only a brief voluntary summary belongs there.
 
-`GET /api/agent/manifest/:siteId` and the single-site alias `/.well-known/arrival.json` return HTTP 200 with public questions, version, optionality and request shapes. No ingestion key or owner records are exposed. HTML installs include a discovery link; server adapters can also set a Link header. This is an Arrival convention, not a universally implemented agent standard.
+AES-GCM protects the state and clearance from modification. Tokens bind purpose, workspace, origin and expiry. The state preserves the original path/query without storing that query as analytics. The continuation pass lasts one hour. A separate readable cookie only suppresses duplicate browser prompts; it is not the clearance credential. Existing answers are not overwritten by retries. Question snapshots remain tied to each visit.
 
-`POST /api/agent/collect/:siteId` accepts `start`, `check_in` and event reports. It permits HTTP clients without Origin, but rejects an explicitly foreign browser Origin. Tokens identify a visit, preserve its question snapshot and can resume it across reported pages. Records use the `agent` source and events are labeled `agent reported`. They must not be presented as independently observed requests.
+Collector failure returns website control to the host. This availability choice, search-indexer exemption and imperfect classification mean Arrival is not a universal anti-bypass firewall. Private content still needs the customer's existing authorization. It cannot guarantee zero churn; the funnel shows questions presented, answered and subsequent requests observed. Missing continuation is not proof of abandonment or a lost sale.
 
-A read-only client can ignore check-in and continue its task. Tools that cannot POST cannot submit structured answers. This limits data collection, not website access.
+Declared answers, client identity claims, browser-reported properties, integration-reported requests and IP-derived estimates retain separate provenance. No private prompts are recovered. See [network data](network-data.md).
 
-## Host request evidence
+## Customer isolation
 
-`POST /api/ingest` requires a private, rotatable ingestion key. It accepts deduplicated request IDs, a host session ID and bounded request metadata. Queries and referrer queries are removed. The source is `integration reported`, because Arrival did not observe the original connection.
+Each workspace has a generated site ID, origin, own question set, salted password hash and hashed integration key. Owner sessions identify one site. Public collection routes select an explicit site; private ingestion resolves its site from the key. Store reads/writes, report aggregates, detail views and exports are scoped to the active site. A public site ID never authorizes owner access. Tests exercise two workspaces with colliding event IDs, separate keys, cross-site reads, exports and origin checks.
 
-`sdk/arrival.ts` reports Express responses after `finish` and can create its own opaque session cookie. `sdk/web.ts` accepts a Web Request and works with a host's background `waitUntil` mechanism. If the host cannot observe the final response status, that field is omitted and stored as unknown. Both helpers contain reporting and error-hook failures. There is no durable queue. Browser and host-server visit records are currently separate; automatic cross-channel merging is not implemented.
-
-## Network enrichment
-
-`server/network.ts` normalizes IP addresses, records connection provenance and filters request headers through an allowlist. `server/geo.ts` resolves public addresses against optional local DB-IP Lite City/ASN MMDB databases using `maxmind`, with a bounded lookup cache. Private/reserved addresses skip enrichment. Hosting hints are conservative organization-name inferences. Neither network ownership nor city estimates verify an agent identity or actual host behind a proxy.
-
-The owner can install/update databases asynchronously. Lookups do not issue per-visitor outbound requests. Dataset absence, misses and update failures leave website access available. SQLite stores enrichment and up to eight address changes per visit. Startup and dashboard updates reprocess the latest 300 visits; legacy addresses are labeled as stored evidence, not new network observations. See [network data](network-data.md) for fields, licensing and proxy configuration.
-
-## Instrumented demonstration
-
-`/lab` records actual page requests and serves content immediately by default. It exposes optional questions through HTML and JSON, preserves a visit cookie, and records searches, downloads and a local shortlist action. The public temporary testing facade maps its homepage directly to this demo and keeps owner routes private.
-
-An advanced owner switch can still enable demo-only mandatory admission. Its browser questionnaire is HTTP 200, while protected API requests can return a JSON 403 challenge. Valid answers then rotate credentials and grant one-hour scoped access. This legacy demo feature is off by default and is unrelated to installing the observability embed. Existing saved policies are preserved on upgrade; switch off the advanced option to use observation.
-
-## Storage and owner access
-
-`server/database.ts` provides awaited access to local Node SQLite or durable Turso over HTTPS. `server/store.ts` maintains sites, visits, events and hashed owner sessions in SQLite, with WAL, prepared statements and versioned question snapshots. Credentials are excluded from owner inspection and exports. Direct local bootstrap requires a loopback connection and localhost Host; a configured password disables bootstrap. Public-interface binding requires an owner password. Mutations reject foreign origins.
-
-The API validates bounded questions, answers, paths and event fields. Agent names and task summaries are unverified claims. IP metadata can describe a proxy, not a user or location. Trust forwarded headers only from configured reverse proxies. The public landing page uses an illustrative visit, not private workspace records.
+The legacy local operator workspace and `/lab` are retained for development. They are not a customer's integration. Whiteye uses a normal customer workspace and the published SDK.
 
 ## Current limits
 
-One owner/site; local SQLite or remote Turso storage; no durable queue, tenant isolation, retention automation, verified operators or complete CDN log connectors. Display/export limits are the latest 300 visits and 1,500 events per timeline. Records beyond those limits remain in SQLite. HTML snippets do not collect HTTP-only crawler requests on Wix or Shopify. External websites require the hosted HTTPS collector; see [Vercel setup](vercel.md).
+One website per workspace. No teams, password recovery, email/domain verification, billing or retention automation. The sample Next.js matcher covers pages/documents, not API handlers or framework assets. Wix/Shopify snippets are browser-only; native apps and CDN connectors are not shipped. Reports show at most 300 recent visits and 1,500 events per visit; country/state summaries aggregate the selected time range. Browser and server records remain separate. Rate limiting is per application instance, not a distributed quota system.
+
+Robots.txt is not access authorization: [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html). Identity verification requires additional evidence such as [verified bot signatures or published identities](https://developers.cloudflare.com/bots/concepts/bot/verified-bots/); it is not implemented here.

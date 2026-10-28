@@ -1,0 +1,30 @@
+{
+  "name": "@arrival/next",
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Agent introductions and observability for Next.js websites.",
+  "exports": {
+    ".": {
+      "types": "./next.d.mts",
+      "default": "./next.mjs"
+    },
+    "./core": {
+      "types": "./core.d.mts",
+      "default": "./core.mjs"
+    },
+    "./client": {
+      "types": "./client.d.mts",
+      "default": "./client.mjs"
+    }
+  },
+  "files": [
+    "*.mjs",
+    "*.d.mts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "next": ">=15",
+    "react": ">=19"
+  },
+  "license": "UNLICENSED"
+}

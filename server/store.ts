@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { SQLInputValue } from 'node:sqlite';
 import { Database } from './database.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, chmodSync } from 'node:fs';
@@ -66,6 +68,27 @@ export const defaultQuestions: Question[] = [
 ];
 export class Store {
   db: Database;
+  private context = new AsyncLocalStorage<string>();
+  get siteId() {
+    return this.context.getStore() ?? 'site_local';
+  }
+  withSite<T>(siteId: string, work: () => T): T {
+    return this.context.run(siteId, work);
+  }
+  scoped(sql: string) {
+    const filter = /\bFROM events\b/i.test(sql)
+      ? 'session_id IN (SELECT id FROM sessions WHERE site_id=?)'
+      : 'site_id=?';
+    const match = /\b(GROUP BY|ORDER BY|LIMIT)\b/i.exec(sql);
+    const split = match?.index ?? sql.length;
+    const before = sql.slice(0, split),
+      after = sql.slice(split);
+    const query = before + (/\bWHERE\b/i.test(before) ? ' AND ' : ' WHERE ') + filter + ' ' + after;
+    return {
+      get: (...args: SQLInputValue[]) => this.db.prepare(query).get(...args, this.siteId),
+      all: (...args: SQLInputValue[]) => this.db.prepare(query).all(...args, this.siteId),
+    };
+  }
   readonly ready: Promise<void>;
   collectorOrigin?: string;
   constructor(
@@ -93,7 +116,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), created_at TEXT NOT NULL, type TEXT NOT NULL, path TEXT NOT NULL, method TEXT NOT NULL, status INTEGER, source TEXT NOT NULL, data TEXT NOT NULL, dedupe_key TEXT UNIQUE);
       CREATE INDEX IF NOT EXISTS events_session_time ON events(session_id, created_at);
       CREATE INDEX IF NOT EXISTS sessions_created ON sessions(created_at);
-      CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL, site_id TEXT NOT NULL DEFAULT 'site_local');
+      CREATE TABLE IF NOT EXISTS workspaces (site_id TEXT PRIMARY KEY REFERENCES sites(id), slug TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS entry_policies (site_id TEXT PRIMARY KEY REFERENCES sites(id), mode TEXT NOT NULL DEFAULT 'ask', message TEXT NOT NULL DEFAULT 'A quick introduction, then back to your task.');
     `);
     if (
       !(await this.db.prepare('PRAGMA table_info(sessions)').all()).some(
@@ -110,6 +135,24 @@ export class Store {
         )
           throw error;
       }
+    if (
+      !(await this.db.prepare('PRAGMA table_info(admin_sessions)').all()).some(
+        (c) => c.name === 'site_id',
+      )
+    ) {
+      try {
+        await this.db.exec(
+          "ALTER TABLE admin_sessions ADD COLUMN site_id TEXT NOT NULL DEFAULT 'site_local'",
+        );
+      } catch (error) {
+        if (
+          !(await this.db.prepare('PRAGMA table_info(admin_sessions)').all()).some(
+            (c) => c.name === 'site_id',
+          )
+        )
+          throw error;
+      }
+    }
     if (!(await this.db.prepare('SELECT id FROM sites LIMIT 1').get()))
       await this.db
         .prepare(
@@ -125,8 +168,15 @@ export class Store {
   }
   async site(): Promise<Site> {
     await this.ready;
-    const row = (await this.db.prepare('SELECT * FROM sites LIMIT 1').get())!;
+    const row = (await this.db
+      .prepare(
+        'SELECT s.*,w.slug,p.mode AS entry_mode,p.message AS entry_message FROM sites s LEFT JOIN workspaces w ON w.site_id=s.id LEFT JOIN entry_policies p ON p.site_id=s.id WHERE s.id=?',
+      )
+      .get(this.siteId))!;
     return {
+      workspace: row.slug ? String(row.slug) : undefined,
+      entryMode: row.entry_mode ? (String(row.entry_mode) as 'ask' | 'observe') : 'observe',
+      entryMessage: String(row.entry_message ?? 'A quick introduction, then back to your task.'),
       id: String(row.id),
       name: String(row.name),
       origin: String(row.origin),
@@ -170,7 +220,10 @@ export class Store {
   async keyValid(key: string) {
     await this.ready;
     return (
-      !!key && !!(await this.db.prepare('SELECT id FROM sites WHERE ingest_hash=?').get(hash(key)))
+      !!key &&
+      !!(await this.db
+        .prepare('SELECT id FROM sites WHERE ingest_hash=? AND id=?')
+        .get(hash(key), this.siteId))
     );
   }
   async createSession(input: {
@@ -263,14 +316,18 @@ export class Store {
   }
   async get(id: string) {
     await this.ready;
-    const row = await this.db.prepare(`${sessionSelect} WHERE s.id=?`).get(id);
+    const row = await this.db
+      .prepare(`${sessionSelect} WHERE s.id=? AND s.site_id=?`)
+      .get(id, this.siteId);
     return row ? await this.map(row) : undefined;
   }
   async network(id: string, context: NetworkContext) {
     await this.ready;
     // Compare-and-swap prevents concurrent requests losing the address history.
     for (let attempt = 0; attempt < 5; attempt++) {
-      const row = await this.db.prepare('SELECT network FROM sessions WHERE id=?').get(id);
+      const row = await this.db
+        .prepare('SELECT network FROM sessions WHERE id=? AND site_id=?')
+        .get(id, this.siteId);
       if (!row) return;
       const previous = json<Partial<NetworkContext>>(row.network);
       if (previous.observedAt && previous.observedAt > context.observedAt) return;
@@ -279,8 +336,13 @@ export class Store {
       if (context.ip && (!previous.ip || changed))
         history.push({ ip: context.ip, observedAt: context.observedAt, source: context.ipSource });
       const result = await this.db
-        .prepare('UPDATE sessions SET network=? WHERE id=? AND network=?')
-        .run(JSON.stringify({ ...context, history: history.slice(-8) }), id, String(row.network));
+        .prepare('UPDATE sessions SET network=? WHERE id=? AND network=? AND site_id=?')
+        .run(
+          JSON.stringify({ ...context, history: history.slice(-8) }),
+          id,
+          String(row.network),
+          this.siteId,
+        );
       if (!result.changes) continue;
       if (changed)
         await this.event(
@@ -298,10 +360,19 @@ export class Store {
       return;
     }
   }
+  async entryChallenge(id: string) {
+    const token = credential();
+    await this.db
+      .prepare('UPDATE sessions SET token_hash=? WHERE id=? AND site_id=?')
+      .run(hash(token), id, this.siteId);
+    return token;
+  }
   async byToken(token: string) {
     await this.ready;
     if (!token) return undefined;
-    const row = await this.db.prepare(`${sessionSelect} WHERE s.token_hash=?`).get(hash(token));
+    const row = await this.db
+      .prepare(`${sessionSelect} WHERE s.token_hash=? AND s.site_id=?`)
+      .get(hash(token), this.siteId);
     return row ? await this.map(row) : undefined;
   }
   async byExternal(key: string) {
@@ -316,8 +387,10 @@ export class Store {
     return Promise.all(
       (
         await this.db
-          .prepare(`${sessionSelect} WHERE s.created_at>=? ORDER BY s.created_at DESC LIMIT 300`)
-          .all(since)
+          .prepare(
+            `${sessionSelect} WHERE s.created_at>=? AND s.site_id=? ORDER BY s.created_at DESC LIMIT 300`,
+          )
+          .all(since, this.siteId)
       ).map((r) => this.map(r)),
     );
   }
@@ -337,7 +410,7 @@ export class Store {
     const time = now();
     const result = await this.db
       .prepare(
-        'INSERT OR IGNORE INTO events (id,session_id,created_at,type,path,method,status,source,data,dedupe_key) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        'INSERT OR IGNORE INTO events (id,session_id,created_at,type,path,method,status,source,data,dedupe_key) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM sessions WHERE id=? AND site_id=?)',
       )
       .run(
         randomUUID(),
@@ -350,17 +423,23 @@ export class Store {
         options.source ?? 'server observed',
         JSON.stringify(data),
         options.dedupeKey ?? null,
+        id,
+        this.siteId,
       );
     if (Number(result.changes) > 0)
-      await this.db.prepare('UPDATE sessions SET updated_at=? WHERE id=?').run(time, id);
+      await this.db
+        .prepare('UPDATE sessions SET updated_at=? WHERE id=? AND site_id=?')
+        .run(time, id, this.siteId);
     return Number(result.changes) > 0;
   }
   async events(id: string): Promise<VisitEvent[]> {
     await this.ready;
     return (
       await this.db
-        .prepare('SELECT * FROM events WHERE session_id=? ORDER BY created_at, rowid LIMIT 1500')
-        .all(id)
+        .prepare(
+          'SELECT * FROM events WHERE session_id=? AND session_id IN (SELECT id FROM sessions WHERE site_id=?) ORDER BY created_at, rowid LIMIT 1500',
+        )
+        .all(id, this.siteId)
     ).map((r) => ({
       id: String(r.id),
       sessionId: String(r.session_id),
@@ -378,7 +457,7 @@ export class Store {
     const token = credential();
     await this.db
       .prepare(
-        "UPDATE sessions SET answers=?, permissions=?, status='admitted', token_hash=?, expires_at=? WHERE id=?",
+        "UPDATE sessions SET answers=?, permissions=?, status='admitted', token_hash=?, expires_at=? WHERE id=? AND site_id=?",
       )
       .run(
         JSON.stringify(answers),
@@ -386,6 +465,7 @@ export class Store {
         hash(token),
         new Date(Date.now() + 3600000).toISOString(),
         id,
+        this.siteId,
       );
     await this.event(
       id,
@@ -402,14 +482,18 @@ export class Store {
   }
   async revoke(id: string) {
     await this.ready;
-    await this.db.prepare("UPDATE sessions SET status='revoked' WHERE id=?").run(id);
+    await this.db
+      .prepare("UPDATE sessions SET status='revoked' WHERE id=? AND site_id=?")
+      .run(id, this.siteId);
     await this.event(id, 'access_revoked', '/', {}, { source: 'owner action' });
   }
   async declare(id: string, answers: Visit['answers'], source = 'browser reported') {
     await this.ready;
     await this.db
-      .prepare("UPDATE sessions SET answers=?, status='observed', permissions='[]' WHERE id=?")
-      .run(JSON.stringify(answers), id);
+      .prepare(
+        "UPDATE sessions SET answers=?, status='observed', permissions='[]' WHERE id=? AND site_id=?",
+      )
+      .run(JSON.stringify(answers), id, this.siteId);
     await this.event(
       id,
       'purpose_declared',
@@ -435,7 +519,9 @@ export class Store {
     const automation =
       environment.webdriver === true || /HeadlessChrome/i.test(String(environment.userAgent ?? ''));
     await this.db
-      .prepare('UPDATE sessions SET environment=?, evidence=?, classification=? WHERE id=?')
+      .prepare(
+        'UPDATE sessions SET environment=?, evidence=?, classification=? WHERE id=? AND site_id=?',
+      )
       .run(
         JSON.stringify(environment),
         JSON.stringify(evidence),
@@ -443,6 +529,7 @@ export class Store {
           ? 'automation signals'
           : visit.classification,
         id,
+        this.siteId,
       );
   }
   close() {

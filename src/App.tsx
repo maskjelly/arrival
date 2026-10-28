@@ -28,6 +28,7 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
+import { CustomerSetup } from './CustomerSetup.tsx';
 import BuildStatus from './BuildStatus.tsx';
 import InstallGuide from './InstallGuide.tsx';
 import {
@@ -185,6 +186,7 @@ export default function App() {
     addEventListener('popstate', back);
     return () => removeEventListener('popstate', back);
   }, []);
+  const workspaceSlug = location.pathname.match(/^\/app\/([a-z0-9-]+)/)?.[1];
   const [range, setRange] = useState('24h');
   const [data, setData] = useState<Overview>();
   const [login, setLogin] = useState(false);
@@ -221,6 +223,8 @@ export default function App() {
   }, [mobileNav]);
   const reload = useCallback(async () => {
     const next = await api<Overview>(`/admin/overview?range=${range}`);
+    if (workspaceSlug && next.site.workspace !== workspaceSlug)
+      throw new ApiError('Sign into this workspace.', 401);
     setData(next);
     setLogin(false);
     return next;
@@ -233,6 +237,7 @@ export default function App() {
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           try {
+            if (workspaceSlug) throw new Error('Customer sign-in required.');
             await api('/auth/local', { method: 'POST' });
             if (live) await reload();
           } catch {
@@ -315,13 +320,23 @@ export default function App() {
         <div className="login-panel">
           <Brand />
           <h1>Your agent intelligence workspace.</h1>
-          <p>Enter the owner password configured for this server.</p>
+          <p>
+            {workspaceSlug
+              ? `Your ${workspaceSlug} workspace. Enter the password you chose during setup.`
+              : 'Enter your workspace password.'}
+          </p>
           <form
             onSubmit={async (event) => {
               event.preventDefault();
               setError('');
               try {
-                await api('/auth/login', { method: 'POST', body: JSON.stringify({ password }) });
+                await api('/auth/login', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    password,
+                    ...(workspaceSlug ? { workspace: workspaceSlug } : {}),
+                  }),
+                });
                 await reload();
                 setPassword('');
               } catch (err) {
@@ -329,7 +344,9 @@ export default function App() {
               }
             }}
           >
-            <label htmlFor="password">Owner password</label>
+            <label htmlFor="password">
+              {workspaceSlug ? 'Workspace password' : 'Owner password'}
+            </label>
             <input
               id="password"
               type="password"
@@ -396,15 +413,15 @@ export default function App() {
           <span className="workspace-symbol">{data.site.name.slice(0, 1).toUpperCase()}</span>
           <div>
             <strong>{data.site.name}</strong>
-            <small>Website workspace</small>
+            <small>{new URL(data.site.origin).hostname}</small>
           </div>
         </div>
-        <div className="nav-label">Workspace</div>
+
         <nav aria-label="Workspace pages">
           {views.map((item) => (
             <a
               key={item.id}
-              href={`/app?view=${item.id}`}
+              href={`${location.pathname}?view=${item.id}`}
               aria-current={view === item.id ? 'page' : undefined}
               className={`${view === item.id ? 'active' : ''} ${item.id === 'project' ? 'secondary-nav' : ''}`}
               onClick={(event) => {
@@ -430,16 +447,20 @@ export default function App() {
         <div className="sidebar-note">
           <span className="observation-dot" />
           <strong>Observability first</strong>
-          <p>Your website stays open. Check-in is optional.</p>
+          <p>
+            {data.site.entryMode === 'ask'
+              ? 'Agents introduce their task, then continue.'
+              : 'Visits are observed without an entry question.'}
+          </p>
         </div>
-        <a className="sidebar-link" href="/lab" target="_blank" rel="noreferrer">
-          Explore the demo website <ArrowSquareOut size={16} />
+        <a className="sidebar-link" href={data.site.origin} target="_blank" rel="noreferrer">
+          Open website <ArrowSquareOut size={16} />
         </a>
         <div className="sidebar-bottom">
           <span className="owner-avatar">You</span>
           <div>
-            <strong>Local workspace</strong>
-            <small>Single operator</small>
+            <strong>{data.site.workspace ?? data.site.name}</strong>
+            <small>Customer workspace</small>
           </div>
           <button
             title="Sign out"
@@ -693,6 +714,32 @@ function OverviewPage({
           </div>
         ))}
       </div>
+      {data.entry && (
+        <section className="entry-funnel" aria-label="Agent entry funnel">
+          <div>
+            <span>Agent introductions</span>
+            <p>What happened after agents reached your question layer</p>
+          </div>
+          <ol>
+            <li>
+              <strong>{data.entry.prompted}</strong>
+              <span>Questions shown</span>
+            </li>
+            <li>
+              <strong>{data.entry.answered}</strong>
+              <span>Answered</span>
+            </li>
+            <li>
+              <strong>{data.entry.continued}</strong>
+              <span>Continued browsing</span>
+            </li>
+          </ol>
+          <small>
+            No continuation observed does not prove abandonment. Responses and network evidence
+            remain separate.
+          </small>
+        </section>
+      )}
       <div className="analytics-grid">
         <section className="panel traffic-panel">
           <div className="panel-heading">
@@ -771,12 +818,24 @@ function OverviewPage({
                   <Code size={16} />
                   Connect a website
                 </button>
-                <button className="button secondary" disabled={demoBusy} onClick={runDemo}>
-                  <Play size={16} weight="fill" />
-                  {demoBusy ? 'Running a real HTTP visit…' : 'Run a demo agent'}
-                </button>
-                <a className="button secondary" href="/lab" target="_blank" rel="noreferrer">
-                  Visit the demo website <ArrowSquareOut size={16} />
+                {!data.site.workspace && (
+                  <button
+                    className="button secondary"
+
+                    disabled={demoBusy}
+                    onClick={runDemo}
+                  >
+                    <Play size={16} weight="fill" />
+                    {demoBusy ? 'Running a real HTTP visit…' : 'Run a demo agent'}
+                  </button>
+                )}
+                <a
+                  className="button secondary"
+                  href={data.site.origin}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Visit your website <ArrowSquareOut size={16} />
                 </a>
               </div>
             }
@@ -830,13 +889,20 @@ function OverviewPage({
           </div>
         </section>
       </div>
-      {data.sessions.length > 0 && (
+      {data.sessions.length > 0 && !data.site.workspace && (
         <div className="demo-control">
           <span>Want another complete example?</span>
-          <button className="text-button" disabled={demoBusy} onClick={runDemo}>
-            <Play size={14} />
-            {demoBusy ? 'Running…' : 'Run a controlled HTTP agent'}
-          </button>
+          {!data.site.workspace && (
+            <button
+              className="text-button"
+
+              disabled={demoBusy}
+              onClick={runDemo}
+            >
+              <Play size={14} />
+              {demoBusy ? 'Running…' : 'Run a controlled HTTP agent'}
+            </button>
+          )}
         </div>
       )}
     </>
@@ -872,8 +938,8 @@ function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boo
       >
         <defs>
           <linearGradient id="traffic-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4965df" stopOpacity=".13" />
-            <stop offset="100%" stopColor="#4965df" stopOpacity="0" />
+            <stop offset="0%" stopColor="#3d7656" stopOpacity=".13" />
+            <stop offset="100%" stopColor="#3d7656" stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((r) => (
@@ -1146,8 +1212,13 @@ function VisitsPage({
         <Empty
           title={data.sessions.length ? 'No matching visits.' : 'No visits recorded yet.'}
           action={
-            !data.sessions.length ? (
-              <button className="button primary" disabled={demoBusy} onClick={runDemo}>
+            !data.sessions.length && !data.site.workspace ? (
+              <button
+                className="button primary"
+
+                disabled={demoBusy}
+                onClick={runDemo}
+              >
                 <Play size={16} />
                 Run a demo agent
               </button>
@@ -1183,6 +1254,7 @@ function QuestionsPage({
 }) {
   const [questions, setQuestions] = useState<Question[]>(() => structuredClone(site.questions)),
     [required, setRequired] = useState(site.requireAdmission),
+    [entryMode, setEntryMode] = useState(site.entryMode ?? 'observe'),
     [saving, setSaving] = useState(false),
     [error, setError] = useState('');
   const update = (index: number, change: Partial<Question>) =>
@@ -1212,6 +1284,7 @@ function QuestionsPage({
                 name: site.name,
                 origin: site.origin,
                 requireAdmission: required,
+                entryMode,
                 questions,
               });
             } catch (err) {
@@ -1230,6 +1303,29 @@ function QuestionsPage({
           {error}
         </div>
       )}
+      <section className="entry-policy">
+        <div>
+          <h2>At your website’s door</h2>
+          <p>
+            Ask recognized interactive agents once, then return them to their original destination.
+            Search indexers continue with request logging.
+          </p>
+        </div>
+        <label>
+          Entry behavior
+          <select
+            value={entryMode}
+            onChange={(e) => setEntryMode(e.target.value as 'ask' | 'observe')}
+          >
+            <option value="ask">Ask agents, then continue</option>
+            <option value="observe">Observe without asking</option>
+          </select>
+        </label>
+        <small>
+          Requires the server integration. Browser impersonation and service outages are not an
+          enforced security boundary.
+        </small>
+      </section>
       <div className="questions-layout">
         <div>
           <details className="advanced-settings">
@@ -1432,127 +1528,133 @@ function IntegrationPage({
           <p>Save your website, choose your platform, and paste the snippet once.</p>
         </div>
       </div>
-      <div className="integration-grid">
-        <div className="integration-main">
-          <section className="panel setup-panel">
-            <div className="setup-heading">
-              <Globe size={24} />
-              <div>
-                <h2>Your website</h2>
-                <p>The browser collector only accepts this exact origin.</p>
+      <CustomerSetup site={site} copy={copy} />
+      <NetworkSetup />
+      <details className="legacy-install">
+        <summary>Other platforms and browser-only collection</summary>
+        <div className="integration-grid">
+          <div className="integration-main">
+            <section className="panel setup-panel">
+              <div className="setup-heading">
+                <Globe size={24} />
+                <div>
+                  <h2>Your website</h2>
+                  <p>The browser collector only accepts this exact origin.</p>
+                </div>
               </div>
-            </div>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setBusy(true);
-                setError('');
-                try {
-                  await save({
-                    name,
-                    origin,
-                    questions: site.questions,
-                    requireAdmission: site.requireAdmission,
-                  });
-                } catch (err) {
-                  setError((err as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <div className="form-grid">
-                <label>
-                  Display name
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    maxLength={80}
-                  />
-                </label>
-                <label>
-                  Website origin
-                  <input
-                    type="url"
-                    value={origin}
-                    onChange={(e) => setOrigin(e.target.value)}
-                    required
-                    placeholder="https://example.com"
-                  />
-                </label>
-              </div>
-              <button className="button secondary" disabled={busy}>
-                Save website
-              </button>
-            </form>
-          </section>
-          <InstallGuide site={site} copy={copy} />
-          <NetworkSetup />
-          <details className="panel setup-panel server-setup">
-            <summary>
-              <Key size={18} /> Add server-side collection <span>For HTTP-only agents</span>
-            </summary>
-            <div className="setup-heading">
-              <Key size={24} />
-              <div>
-                <h2>Server-side collection</h2>
-                <p>Record HTTP requests, including clients that never execute JavaScript.</p>
-              </div>
-              <span className="integration-tag">Private key</span>
-            </div>
-            <button
-              className="button secondary"
-              onClick={async () => {
-                try {
-                  const data = await api<{ key: string }>('/admin/ingest-key', { method: 'POST' });
-                  setKey(data.key);
-                } catch (err) {
-                  setError((err as Error).message);
-                }
-              }}
-            >
-              <Key size={16} />
-              {site.hasIngestKey || key ? 'Rotate ingestion key' : 'Generate ingestion key'}
-            </button>
-            {key && (
-              <div className="key-output">
-                <code>{key}</code>
-                <button
-                  className="icon-button"
-                  onClick={() => copy(key)}
-                  aria-label="Copy ingestion key"
-                >
-                  <Copy size={17} />
-                </button>
-              </div>
-            )}
-            <p className="setup-note">
-              Keys are shown once. Rotation immediately invalidates the previous key. Keep this key
-              on your server.
-            </p>
-            <label className="collector-mode">
-              Server framework
-              <select
-                aria-label="Server framework"
-                value={serverKind}
-                onChange={(e) => setServerKind(e.target.value)}
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setBusy(true);
+                  setError('');
+                  try {
+                    await save({
+                      name,
+                      origin,
+                      questions: site.questions,
+                      requireAdmission: site.requireAdmission,
+                    });
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
               >
-                <option value="express">Express</option>
-                <option value="nextjs">Next.js 16+ Proxy</option>
-              </select>
-            </label>
-            <p className="setup-note">
-              Save the helper in your app’s lib folder:{' '}
-              <a href={serverKind === 'express' ? '/sdk/arrival.ts' : '/sdk/web.ts'} download>
-                {serverKind === 'express' ? 'arrival.ts' : 'web.ts'}
-              </a>
-              . Keep the ingestion key in a server environment variable.
-            </p>
-            <CodeBlock
-              value={
-                serverKind === 'nextjs'
-                  ? `// proxy.ts (alongside app/). Merge with your existing proxy.
+                <div className="form-grid">
+                  <label>
+                    Display name
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      maxLength={80}
+                    />
+                  </label>
+                  <label>
+                    Website origin
+                    <input
+                      type="url"
+                      value={origin}
+                      onChange={(e) => setOrigin(e.target.value)}
+                      required
+                      placeholder="https://example.com"
+                    />
+                  </label>
+                </div>
+                <button className="button secondary" disabled={busy}>
+                  Save website
+                </button>
+              </form>
+            </section>
+            <InstallGuide site={site} copy={copy} />
+
+            <details className="panel setup-panel server-setup">
+              <summary>
+                <Key size={18} /> Add server-side collection <span>For HTTP-only agents</span>
+              </summary>
+              <div className="setup-heading">
+                <Key size={24} />
+                <div>
+                  <h2>Server-side collection</h2>
+                  <p>Record HTTP requests, including clients that never execute JavaScript.</p>
+                </div>
+                <span className="integration-tag">Private key</span>
+              </div>
+              <button
+                className="button secondary"
+                onClick={async () => {
+                  try {
+                    const data = await api<{ key: string }>('/admin/ingest-key', {
+                      method: 'POST',
+                    });
+                    setKey(data.key);
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                <Key size={16} />
+                {site.hasIngestKey || key ? 'Rotate ingestion key' : 'Generate ingestion key'}
+              </button>
+              {key && (
+                <div className="key-output">
+                  <code>{key}</code>
+                  <button
+                    className="icon-button"
+                    onClick={() => copy(key)}
+                    aria-label="Copy ingestion key"
+                  >
+                    <Copy size={17} />
+                  </button>
+                </div>
+              )}
+              <p className="setup-note">
+                Keys are shown once. Rotation immediately invalidates the previous key. Keep this
+                key on your server.
+              </p>
+              <label className="collector-mode">
+                Server framework
+                <select
+                  aria-label="Server framework"
+                  value={serverKind}
+                  onChange={(e) => setServerKind(e.target.value)}
+                >
+                  <option value="express">Express</option>
+                  <option value="nextjs">Next.js 16+ Proxy</option>
+                </select>
+              </label>
+              <p className="setup-note">
+                Save the helper in your app’s lib folder:{' '}
+                <a href={serverKind === 'express' ? '/sdk/arrival.ts' : '/sdk/web.ts'} download>
+                  {serverKind === 'express' ? 'arrival.ts' : 'web.ts'}
+                </a>
+                . Keep the ingestion key in a server environment variable.
+              </p>
+              <CodeBlock
+                value={
+                  serverKind === 'nextjs'
+                    ? `// proxy.ts (alongside app/). Merge with your existing proxy.
 import { NextResponse, type NextRequest, type NextFetchEvent } from 'next/server';
 import { reportArrival } from './lib/web';
 
@@ -1575,60 +1677,61 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
 export const config = {
   matcher: ['/((?!api|_next|favicon.ico|robots.txt|sitemap.xml|.*\\.).*)'],
 };`
-                  : `import { arrivalAnalytics } from './lib/arrival';\n\napp.use(arrivalAnalytics({\n  endpoint: '${base}',\n  key: process.env.ARRIVAL_INGEST_KEY,\n  onError: error => console.warn(error.message),\n}));`
-              }
-              copy={copy}
-            />
-            <p className="setup-note">
-              Use the Express helper without a session package, or download the Web Request helper
-              for Next.js. Server reporting is best-effort and never grants or denies website
-              access.
-            </p>
-          </details>
-          {error && (
-            <div className="error-banner" role="alert">
-              {error}
-            </div>
-          )}
-        </div>
-        <aside>
-          <section className="integration-aside">
-            <span className="note-icon">
-              <Robot size={27} />
-            </span>
-            <h3>Test the full journey.</h3>
-            <p>
-              Browse the Northstar demo freely. The small optional check-in connects declared
-              purpose to observed activity.
-            </p>
-            <a className="button primary" href="/lab" target="_blank" rel="noreferrer">
-              Open instrumented demo <ArrowSquareOut size={16} />
-            </a>
-            <hr />
-            <strong>HTTP agents are welcome.</strong>
-            <p>
-              The public manifest explains optional questions and the reporting API. No model key or
-              custom agent SDK is needed.
-            </p>
-            <CodeBlock
-              value={`curl -H 'Accept: application/json' \\\n  ${base}/api/agent/manifest/${site.id}`}
-              copy={copy}
-            />
-          </section>
-          <div className="integration-limits">
-            <ShieldWarning size={20} />
-            <h4>Know what is verified.</h4>
-            <p>
-              The MVP records request and browser evidence. It does not verify agent operators,
-              infer private prompts, or collect TLS fingerprints.
-            </p>
-            <p>
-              This server runs locally by default. A remote website needs a reachable HTTPS
-              deployment.
-            </p>
+                    : `import { arrivalAnalytics } from './lib/arrival';\n\napp.use(arrivalAnalytics({\n  endpoint: '${base}',\n  key: process.env.ARRIVAL_INGEST_KEY,\n  onError: error => console.warn(error.message),\n}));`
+                }
+                copy={copy}
+              />
+              <p className="setup-note">
+                Use the Express helper without a session package, or download the Web Request helper
+                for Next.js. Server reporting is best-effort and never grants or denies website
+                access.
+              </p>
+            </details>
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
           </div>
-        </aside>
-      </div>
+          <aside>
+            <section className="integration-aside">
+              <span className="note-icon">
+                <Robot size={27} />
+              </span>
+              <h3>Test the full journey.</h3>
+              <p>
+                Browse the Northstar demo freely. The small optional check-in connects declared
+                purpose to observed activity.
+              </p>
+              <a className="button primary" href="/lab" target="_blank" rel="noreferrer">
+                Open instrumented demo <ArrowSquareOut size={16} />
+              </a>
+              <hr />
+              <strong>HTTP agents are welcome.</strong>
+              <p>
+                The public manifest explains optional questions and the reporting API. No model key
+                or custom agent SDK is needed.
+              </p>
+              <CodeBlock
+                value={`curl -H 'Accept: application/json' \\\n  ${base}/api/agent/manifest/${site.id}`}
+                copy={copy}
+              />
+            </section>
+            <div className="integration-limits">
+              <ShieldWarning size={20} />
+              <h4>Know what is verified.</h4>
+              <p>
+                The MVP records request and browser evidence. It does not verify agent operators,
+                infer private prompts, or collect TLS fingerprints.
+              </p>
+              <p>
+                This server runs locally by default. A remote website needs a reachable HTTPS
+                deployment.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </details>
     </>
   );
 }

@@ -23,14 +23,11 @@ Vercel's deployment login wall must permit public collector traffic. Arrival's o
 
 The hosted entrypoint trusts one Vercel proxy hop. Vercel overwrites forwarding headers at its edge; do not reuse this entrypoint behind an arbitrary proxy. Host adapters retain integration-reported provenance. IP data identifies the visible exit network, not the agent's actual host behind a proxy.
 
-## Connect whiteye.in
+## Customer installation, including Whiteye
 
-In Arrival, set the site name to **Whiteye** and origin to **https://whiteye.in**, retaining the current optional questions. Generate a private ingestion key. In the `whiteye-in` Vercel project set:
+Use `/start` to create the customer workspace and password. The generated setup is the source of truth: install the published Next.js package, set the collector URL, generated public site ID and private integration key, export the SDK middleware and include its browser component. See [the package guide](../packages/next/README.md).
 
-- `NEXT_PUBLIC_ARRIVAL_URL=https://arrival-iota.vercel.app`
-- `ARRIVAL_INGEST_KEY`: the private key, as a sensitive server secret
-
-Redeploy the website so its static HTML includes the script and manifest link. `components/arrival.tsx` loads the browser tracker; `middleware.ts` reports HTTP page arrivals in the background with a one-hour opaque session cookie. It uses Vercel's IP helper only on that platform, skips prefetches, strips query strings and leaves final response status unknown. The HTTP middleware covers chatbots that do not execute JavaScript. The initial browser collector request allows ten seconds for cold starts and IP-reader initialization; it runs in the background and never delays website access.
+Whiteye uses that exact installation. Its private dashboard is `/app/whiteye`. It has no custom declaration endpoint or hand-copied server helper. Old operator demo records remain under the legacy workspace, separate from the new customer’s records.
 
 ## Verify the deployment
 
@@ -41,12 +38,12 @@ Redeploy the website so its static HTML includes the script and manifest link. `
 5. In a browser, visit the website, optionally answer questions, navigate and check the browser record separately.
 6. Open a second owner session and confirm the same visits persist. Do not equate a health response or successful build with collected website traffic.
 
-The hosted whiteye workspace starts with the preserved question set and clearly labeled deployment checks. Previous local demo records remain in `.data/arrival.sqlite`; they are not silently presented as new whiteye traffic.
+Customer workspaces start with the standard question set and can edit it independently. Previous local demo records remain in `.data/arrival.sqlite`; they are not silently presented as new whiteye traffic.
 
 ## Phone-agent test
 
 Ask the agent to open the live website directly, read two projects and the résumé, and recommend a project for a Rust/AI systems role. Include a fresh test query in the starting URL to reduce upstream fetch-cache reuse. The request log intentionally strips that query; identify the run by time and paths. Cached search snippets alone may not contact the website.
 
-For optional intent answers, also ask it to read `https://whiteye.in/.well-known/arrival.json` and follow the check-in protocol if it can POST. A read-only chatbot can generate request telemetry but cannot submit a form or reveal its private task context. Lack of answers is not a collection failure. Browser/server records are separate, and tools that do not retain cookies may create separate visits for each request.
+For optional intent answers, let it follow the automatic introduction at the page it requested. The integration also exposes `https://whiteye.in/.well-known/arrival.json` for discovery and provides a GET answer path for read-only HTTP tools. A read-only chatbot can generate request telemetry but cannot submit a form or reveal its private task context. Lack of answers is not a collection failure. Browser/server records are separate, and tools that do not retain cookies may create separate visits for each request.
 
 Source references: [Vercel filesystem limits](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel), [request-header trust](https://vercel.com/docs/headers/request-headers), [Turso on Vercel](https://vercel.com/marketplace/tursocloud/database), and [Next.js middleware background work](https://nextjs.org/docs/15/app/api-reference/file-conventions/middleware).

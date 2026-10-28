@@ -12,8 +12,8 @@ export const stack = [
   },
   { name: 'Zod 4', role: 'Server validation for answers, configuration, and telemetry.' },
   {
-    name: 'Native CSS + IBM Plex',
-    role: 'Neutral analytics surfaces, a restrained cobalt accent, readable typography, and responsive layouts.',
+    name: 'Native CSS + Manrope',
+    role: 'Quiet green surfaces, variable Manrope typography, top navigation and responsive customer views.',
   },
   { name: 'Playwright + node:test', role: 'Browser journeys and API/integration checks.' },
 ];
@@ -73,9 +73,9 @@ export const nextFeatures = [
       'Add Wix and Shopify marketplace apps and CDN/log integrations. Current platform support uses custom-code snippets, not installed marketplace apps.',
   },
   {
-    title: 'Multiple sites and teams',
+    title: 'Teams and account recovery',
     detail:
-      'Tenant isolation, account authentication, team roles, and independent site configurations.',
+      'Workspace isolation and password sign-in are implemented. Team roles, password recovery and verified domain ownership remain.',
   },
   {
     title: 'Reliable collection at scale',

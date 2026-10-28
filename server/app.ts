@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 import { Store, credential, hash } from './store.ts';
 import { cleanPath, cleanReferrer, identify } from './signals.ts';
+import { installEntry } from './entry.ts';
+import { createWorkspace, passwordMatches } from './workspaces.ts';
 import { NetworkEnricher } from './geo.ts';
 import { addressInfo, captureNetwork, reportedNetwork } from './network.ts';
 import { catalog, gatePage, labPage, checkInPage } from './pages.ts';
@@ -29,6 +31,8 @@ const configSchema = z
       )
       .transform((v) => new URL(v).origin),
     requireAdmission: z.boolean(),
+    entryMode: z.enum(['ask', 'observe']).optional(),
+    entryMessage: text(240).optional(),
     questions: z.array(questionSchema).min(1).max(20),
   })
   .strict()
@@ -208,6 +212,30 @@ export async function createApp(
     });
     next();
   });
+  app.use(async (req, res, next) => {
+    let siteId = 'site_local';
+    const publicMatch =
+      /^\/(?:api\/(?:collect|agent\/collect|agent\/manifest|entry\/policy)|check-in)\/([a-zA-Z0-9_-]+)(?:\/|$)/.exec(
+        req.path,
+      );
+    if (publicMatch) siteId = publicMatch[1];
+    else if (req.path === '/api/ingest' || req.path.startsWith('/api/entry/')) {
+      const row = await store.db
+        .prepare('SELECT id FROM sites WHERE ingest_hash=?')
+        .get(hash(bearer(req)));
+      if (row) siteId = String(row.id);
+    } else {
+      const row = await store.db
+        .prepare('SELECT site_id FROM admin_sessions WHERE token_hash=? AND expires_at>?')
+        .get(hash(cookies(req).arrival_owner ?? ''), new Date().toISOString());
+      if (row) siteId = String(row.site_id);
+    }
+    if (!(await store.db.prepare('SELECT id FROM sites WHERE id=?').get(siteId))) {
+      res.status(404).json({ error: 'Workspace not found.' });
+      return;
+    }
+    store.withSite(siteId, () => next());
+  });
   app.use('/api', (_req, res, next) => {
     res.set('Cache-Control', 'no-store');
     next();
@@ -244,8 +272,8 @@ export async function createApp(
     if (
       !token ||
       !(await store.db
-        .prepare('SELECT 1 FROM admin_sessions WHERE token_hash=? AND expires_at>?')
-        .get(hash(token), new Date().toISOString()))
+        .prepare('SELECT 1 FROM admin_sessions WHERE token_hash=? AND expires_at>? AND site_id=?')
+        .get(hash(token), new Date().toISOString(), store.siteId))
     ) {
       res.status(401).json({ error: 'Sign in to access the dashboard.' });
       return;
@@ -258,8 +286,8 @@ export async function createApp(
       .prepare('DELETE FROM admin_sessions WHERE expires_at<?')
       .run(new Date().toISOString());
     await store.db
-      .prepare('INSERT INTO admin_sessions VALUES (?,?)')
-      .run(hash(token), new Date(Date.now() + 28800000).toISOString());
+      .prepare('INSERT INTO admin_sessions(token_hash,expires_at,site_id) VALUES (?,?,?)')
+      .run(hash(token), new Date(Date.now() + 28800000).toISOString(), store.siteId);
     res.cookie('arrival_owner', token, {
       httpOnly: true,
       sameSite: 'strict',
@@ -268,6 +296,7 @@ export async function createApp(
       path: '/',
     });
   }
+  installEntry(app, store, network, answerErrors);
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'arrival' }));
   app.post('/api/auth/local', freshRequest, rateLimit('auth', 15), async (req, res) => {
     let localHost = false;
@@ -286,8 +315,24 @@ export async function createApp(
     res.json({ ok: true, mode: 'local-only' });
   });
   app.post('/api/auth/login', freshRequest, rateLimit('auth', 15), async (req, res) => {
-    const body = validate(z.object({ password: text(256) }).strict(), req.body, res);
+    const body = validate(
+      z.object({ password: text(256), workspace: text(80).optional() }).strict(),
+      req.body,
+      res,
+    );
     if (!body) return;
+    if (body.workspace) {
+      const workspace = await store.db
+        .prepare('SELECT site_id,password_hash FROM workspaces WHERE slug=?')
+        .get(body.workspace);
+      if (!workspace || !(await passwordMatches(body.password, String(workspace.password_hash)))) {
+        res.status(401).json({ error: 'Workspace or password did not match.' });
+        return;
+      }
+      await store.withSite(String(workspace.site_id), () => ownerSession(req, res));
+      res.json({ ok: true });
+      return;
+    }
     if (
       !options.adminPassword ||
       !timingSafeEqual(Buffer.from(hash(body.password)), Buffer.from(hash(options.adminPassword)))
@@ -304,6 +349,44 @@ export async function createApp(
       .run(hash(cookies(req).arrival_owner ?? ''));
     res.clearCookie('arrival_owner');
     res.json({ ok: true });
+  });
+  app.post('/api/auth/register', freshRequest, rateLimit('register', 5), async (req, res) => {
+    const body = validate(
+      z
+        .object({
+          name: text(80).min(1),
+          origin: z.url().max(700),
+          slug: z.string().regex(/^[a-z0-9][a-z0-9-]{2,47}$/),
+          password: z.string().min(12).max(256),
+        })
+        .strict(),
+      req.body,
+      res,
+    );
+    if (!body) return;
+    if (!['http:', 'https:'].includes(new URL(body.origin).protocol)) {
+      res.status(422).json({ error: 'Use a website HTTP or HTTPS origin.' });
+      return;
+    }
+    if (await store.db.prepare('SELECT site_id FROM workspaces WHERE slug=?').get(body.slug)) {
+      res.status(409).json({ error: 'That workspace address is already in use.' });
+      return;
+    }
+    const created = await createWorkspace(store, body);
+    await store.withSite(created.site.id, () => ownerSession(req, res));
+    res.status(201).json(created);
+  });
+  app.get('/api/workspaces/:slug', async (req, res) => {
+    const row = await store.db
+      .prepare(
+        'SELECT s.name,w.slug FROM workspaces w JOIN sites s ON s.id=w.site_id WHERE w.slug=?',
+      )
+      .get(String(req.params.slug));
+    if (!row) {
+      res.status(404).json({ error: 'Workspace not found.' });
+      return;
+    }
+    res.json(row);
   });
   app.use('/api/admin', freshRequest, owner);
   app.get('/api/admin/site', async (_req, res) => res.json(await store.site()));
@@ -325,13 +408,13 @@ export async function createApp(
     res.json({ updated: await refreshNetworkArchive(), status: network.status() }),
   );
   app.get('/api/admin/installation', async (_req, res) => {
-    const browser = await store.db
-      .prepare(
+    const browser = await store
+      .scoped(
         "SELECT MAX(created_at) AS lastSeen, COUNT(DISTINCT session_id) AS visits FROM events WHERE type='page_view' AND source='browser reported' AND json_extract(data,'$.origin')=?",
       )
       .get((await store.site()).origin);
-    const server = await store.db
-      .prepare(
+    const server = await store
+      .scoped(
         "SELECT MAX(updated_at) AS lastSeen, COUNT(*) AS visits FROM sessions WHERE source='server'",
       )
       .get();
@@ -340,7 +423,18 @@ export async function createApp(
   app.put('/api/admin/site', async (req, res) => {
     const body = validate(configSchema, req.body, res);
     if (!body) return;
-    res.json(await store.updateSite({ ...body, origin: new URL(body.origin).origin }));
+    await store.updateSite({ ...body, origin: new URL(body.origin).origin });
+    if (body.entryMode)
+      await store.db
+        .prepare(
+          'INSERT INTO entry_policies(site_id,mode,message) VALUES(?,?,?) ON CONFLICT(site_id) DO UPDATE SET mode=excluded.mode,message=excluded.message',
+        )
+        .run(
+          store.siteId,
+          body.entryMode,
+          body.entryMessage ?? 'A quick introduction, then back to your task.',
+        );
+    res.json(await store.site());
   });
   app.post('/api/admin/ingest-key', async (_req, res) =>
     res.json({ key: await store.rotateKey() }),
@@ -352,13 +446,13 @@ export async function createApp(
         ? '1970'
         : new Date(Date.now() - (range === '7d' ? 7 : 1) * 86400000).toISOString();
     const sessions = await store.list(since);
-    const stat = (await store.db
-      .prepare(
+    const stat = (await store
+      .scoped(
         `SELECT COUNT(*) AS visits, SUM(CASE WHEN status='admitted' AND expires_at>? THEN 1 ELSE 0 END) AS admitted, SUM(CASE WHEN answers!='{}' THEN 1 ELSE 0 END) AS answered, SUM(CASE WHEN classification!='unknown' THEN 1 ELSE 0 END) AS automated, SUM(is_demo) AS demo FROM sessions WHERE created_at>=?`,
       )
       .get(new Date().toISOString(), since))!;
-    const totalEvents = (await store.db
-      .prepare('SELECT COUNT(*) AS n FROM events WHERE created_at>=?')
+    const totalEvents = (await store
+      .scoped('SELECT COUNT(*) AS n FROM events WHERE created_at>=?')
       .get(since))!;
     const chart: {
       time: string;
@@ -368,13 +462,13 @@ export async function createApp(
     const hourly = range === '24h';
     const step = hourly ? 3600000 : 86400000;
     const start = Math.floor((Date.now() - (hourly ? 23 : 6) * step) / step) * step;
-    const buckets = await store.db
-      .prepare(
+    const buckets = await store
+      .scoped(
         `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM events WHERE created_at>=? GROUP BY bucket`,
       )
       .all(new Date(start).toISOString());
-    const visitBuckets = await store.db
-      .prepare(
+    const visitBuckets = await store
+      .scoped(
         `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM sessions WHERE created_at>=? GROUP BY bucket`,
       )
       .all(new Date(start).toISOString());
@@ -387,18 +481,18 @@ export async function createApp(
         events: Number(buckets.find((b) => b.bucket === key)?.n ?? 0),
       });
     }
-    const pages = await store.db
-      .prepare(
-        "SELECT path, COUNT(*) AS count FROM events WHERE type='page_view' AND created_at>=? GROUP BY path ORDER BY count DESC LIMIT 6",
+    const pages = await store
+      .scoped(
+        "SELECT path, COUNT(*) AS count FROM events WHERE type IN ('page_view','request') AND created_at>=? GROUP BY path ORDER BY count DESC LIMIT 6",
       )
       .all(since);
-    const sources = await store.db
-      .prepare(
+    const sources = await store
+      .scoped(
         'SELECT agent_name AS name, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY agent_name ORDER BY count DESC LIMIT 5',
       )
       .all(since);
-    const networkCounts = (await store.db
-      .prepare(
+    const networkCounts = (await store
+      .scoped(
         `SELECT COUNT(DISTINCT json_extract(network,'$.location.countryCode')) AS countryCount,
       SUM(CASE WHEN json_extract(network,'$.location.countryCode') IS NOT NULL THEN 1 ELSE 0 END) AS located,
       SUM(CASE WHEN json_extract(network,'$.asn.number') IS NOT NULL THEN 1 ELSE 0 END) AS asnResolved,
@@ -406,19 +500,29 @@ export async function createApp(
       FROM sessions WHERE created_at>=?`,
       )
       .get(since))!;
-    const countries = await store.db
-      .prepare(
+    const countries = await store
+      .scoped(
         `SELECT json_extract(network,'$.location.countryCode') AS code,
       json_extract(network,'$.location.country') AS name, COUNT(*) AS count FROM sessions
       WHERE created_at>=? AND json_extract(network,'$.location.countryCode') IS NOT NULL GROUP BY code ORDER BY count DESC LIMIT 6`,
       )
       .all(since);
-    const providers = await store.db
-      .prepare(
+    const providers = await store
+      .scoped(
         `SELECT json_extract(network,'$.asn.organization') AS name, COUNT(*) AS count FROM sessions
       WHERE created_at>=? AND json_extract(network,'$.asn.organization') IS NOT NULL GROUP BY name ORDER BY count DESC LIMIT 6`,
       )
       .all(since);
+    const regions = await store
+      .scoped(
+        `SELECT json_extract(network,'$.location.countryCode') AS countryCode, json_extract(network,'$.location.region') AS name, COUNT(*) AS count FROM sessions WHERE created_at>=? AND json_extract(network,'$.location.region') IS NOT NULL GROUP BY countryCode,name ORDER BY count DESC LIMIT 30`,
+      )
+      .all(since);
+    const entry = await store
+      .scoped(
+        `SELECT COUNT(DISTINCT CASE WHEN type='entry_presented' THEN session_id END) AS prompted,COUNT(DISTINCT CASE WHEN type='entry_answered' THEN session_id END) AS answered,COUNT(DISTINCT CASE WHEN type='entry_continued' THEN session_id END) AS continued FROM events WHERE created_at>=?`,
+      )
+      .get(since);
     res.json({
       site: await store.site(),
       sessions,
@@ -431,6 +535,11 @@ export async function createApp(
         automated: Number(stat.automated ?? 0),
         demo: Number(stat.demo ?? 0),
       },
+      entry: {
+        prompted: Number(entry?.prompted ?? 0),
+        answered: Number(entry?.answered ?? 0),
+        continued: Number(entry?.continued ?? 0),
+      },
       chart,
       pages,
       sources,
@@ -441,6 +550,7 @@ export async function createApp(
         publicAddresses: Number(networkCounts.publicAddresses ?? 0),
         total: Number(stat.visits),
         countries,
+        regions,
         providers,
         status: network.status(),
       },
@@ -660,13 +770,20 @@ export async function createApp(
       base = store.collectorOrigin ?? `${req.protocol}://${req.get('host')}`;
     return {
       version: '1.0',
-      name: 'Arrival optional agent observability',
+      name: 'Arrival agent introductions',
       siteId: site.id,
       website: site.origin,
-      optional: true,
-      blocksAccess: false,
+      optional: site.entryMode !== 'ask',
+      blocksAccess: site.entryMode === 'ask',
+      entry: {
+        mode: site.entryMode ?? 'observe',
+        atWebsite: `${site.origin}/__arrival`,
+        policy: `${base}/api/entry/policy/${site.id}`,
+      },
       instructions:
-        'Continue your task normally. If your tools allow it, optionally share a short task summary. Never send private prompts, credentials or personal information. Skipping or a telemetry failure does not restrict website access.',
+        site.entryMode === 'ask'
+          ? 'At the connected website, recognized interactive agents receive a short introduction at their original destination. Answer the website questions once, then follow the continuation URL. Forms and a URL-based submission path are provided there. Never submit private prompts or credentials. Search indexers and unrecognized clients are observed; outages fail open.'
+          : 'Continue your task normally. If your tools allow it, optionally share a short task summary. Never send private prompts, credentials or personal information. Skipping or a telemetry failure does not restrict website access.',
       questions: site.questions,
       questionsVersion: site.questionsVersion,
       collectionEndpoint: `${base}/api/agent/collect/${site.id}`,
@@ -1003,6 +1120,7 @@ export async function createApp(
           ip: text(100).optional(),
           referrer: text(700).optional(),
           durationMs: z.number().min(0).max(3600000).optional(),
+          entryContinued: z.boolean().optional(),
           headers: z
             .record(z.string().max(80), text(700))
             .refine((v) => Object.keys(v).length <= 30)
@@ -1015,9 +1133,9 @@ export async function createApp(
       res,
     );
     if (!body) return;
-    const existing = await store.db
-      .prepare('SELECT session_id FROM events WHERE dedupe_key=?')
-      .get(`ingest:${body.eventId}`);
+    const existing = await store
+      .scoped('SELECT session_id FROM events WHERE dedupe_key=?')
+      .get(`${store.siteId}:ingest:${body.eventId}`);
     if (existing) {
       res.json({ sessionId: existing.session_id, inserted: false });
       return;
@@ -1053,9 +1171,17 @@ export async function createApp(
         method: body.method,
         status: body.status,
         source: 'integration reported',
-        dedupeKey: `ingest:${body.eventId}`,
+        dedupeKey: `${store.siteId}:ingest:${body.eventId}`,
       },
     );
+    if (body.entryContinued)
+      await store.event(
+        visit.id,
+        'entry_continued',
+        cleanPath(body.path),
+        {},
+        { source: 'integration reported', dedupeKey: `entry-continued:${visit.id}` },
+      );
     res.json({ sessionId: visit.id, inserted });
   });
   app.post('/api/admin/run-demo', rateLimit('demo', 10), async (req, res) => {

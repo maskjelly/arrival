@@ -1,412 +1,275 @@
 import { useState } from 'react';
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  Code,
-  FileText,
-  ListChecks,
-  Path,
-  Robot,
-  X,
-} from '@phosphor-icons/react';
-import BuildStatus from './BuildStatus.tsx';
 import './landing.css';
-
-const examples = [
-  {
-    name: 'Research',
-    question: 'What are you trying to learn?',
-    objective: 'Find a data API with a Python SDK and clear usage limits.',
-    pages: ['/docs', '/integrations', '/pricing'],
-    result: 'Read the API specification',
-    kind: 'Read pages · Search · Download',
-  },
-  {
-    name: 'Compare',
-    question: 'What matters in your evaluation?',
-    objective: 'Compare the Team plan with our current provider for a six-person team.',
-    pages: ['/pricing', '/security', '/docs'],
-    result: 'Saved a plan to the shortlist',
-    kind: 'Read pages · Search',
-  },
-  {
-    name: 'Integrate',
-    question: 'What are you building?',
-    objective: 'Check authentication and webhook support before starting an integration.',
-    pages: ['/docs', '/integrations', '/security'],
-    result: 'Downloaded the specification',
-    kind: 'Read pages · Download',
-  },
-];
-
-function Wordmark() {
-  return (
-    <a className="landing-brand" href="/" aria-label="Arrival home">
-      <span className="wordmark-icon">
-        <Path size={25} weight="bold" />
-      </span>
-      arrival<span className="wordmark-dot">.</span>
-    </a>
-  );
-}
-
 export default function Landing() {
-  const [example, setExample] = useState(0);
-  const [menu, setMenu] = useState(false);
-  const current = examples[example];
+  const [step, setStep] = useState(0),
+    [objective, setObjective] = useState('Compare API pricing for a small team.');
   return (
-    <div className="landing">
-      <a className="skip-link" href="#landing-main">
-        Skip to content
-      </a>
-      <header className="landing-nav">
-        <Wordmark />
-        <nav className={menu ? 'open' : ''} aria-label="Main navigation">
-          <a href="#product" onClick={() => setMenu(false)}>
-            The product
-          </a>
-          <a href="#how-it-works" onClick={() => setMenu(false)}>
-            How it works
-          </a>
-          <a href="#build-status" onClick={() => setMenu(false)}>
-            Built & next
-          </a>
-        </nav>
-        <a className="landing-button black-button nav-cta" href="/app">
-          Open workspace <ArrowUpRight size={17} />
+    <div className="marketing">
+      <header className="marketing-nav">
+        <a href="/" className="marketing-brand">
+          arrival<span>↗</span>
         </a>
-        <button
-          className="landing-menu"
-          aria-label={menu ? 'Close menu' : 'Open menu'}
-          aria-expanded={menu}
-          onClick={() => setMenu((v) => !v)}
-        >
-          {menu ? <X size={23} /> : <ListChecks size={23} />}
-        </button>
+        <nav aria-label="Main navigation">
+          <a href="#experience">The experience</a>
+          <a href="#understand">What you learn</a>
+          <a href="#installation">Installation</a>
+        </nav>
+        <div>
+          <a href="/login">Sign in</a>
+          <a className="m-button" href="/start">
+            Connect a website
+          </a>
+        </div>
       </header>
-      <main id="landing-main">
-        <section className="landing-hero">
-          <div className="hero-copy">
-            <span className="section-label hero-label">
-              <span className="hero-indicator" />
-              Agent analytics, with a proper introduction
-            </span>
-            <h1>
-              They visit your site.
-              <br />
-              Get to know why.
-            </h1>
+      <main>
+        <section className="m-hero">
+          <div className="m-hero-copy">
+            <div className="m-product-note">
+              <span />
+              For the agent traffic already finding you
+            </div>
+            <h1>Meet the agents at your door.</h1>
             <p>
-              Understand AI visits without slowing them down.
-              <br className="desktop-break" /> Follow the task, the pages, and what happens next.
+              They arrive with a job to do. Ask a little about it, let them continue, and understand
+              what happens next.
             </p>
-            <div className="hero-actions">
-              <a className="landing-button black-button" href="/app">
-                Explore the workspace <ArrowUpRight size={19} />
+            <div className="m-hero-actions">
+              <a className="m-button" href="/start">
+                Set up Arrival
               </a>
-              <a className="landing-button outline-button" href="/lab">
-                Try the agent check-in <ArrowRight size={18} />
+              <a className="m-text-link" href="#experience">
+                See the introduction
               </a>
             </div>
-            <span className="hero-note">A working local MVP. No sign-up or model key needed.</span>
-          </div>
-          <div className="arrival-preview">
-            <div className="preview-top">
-              <span className="preview-title">
-                <span className="tiny-logo">
-                  <Path size={17} />
-                </span>
-                A little context goes a long way.
-              </span>
-              <span className="example-label">Illustrative visit</span>
-            </div>
-            <div className="preview-main">
-              <section className="preview-declaration">
-                <div className="preview-agent">
-                  <span className="preview-avatar">
-                    <Robot size={26} />
-                  </span>
-                  <div>
-                    <strong>An agent has arrived.</strong>
-                    <small>Start with a question, not an assumption.</small>
-                  </div>
-                </div>
-                <div className="example-switch" aria-label="Choose an example task">
-                  {examples.map((item, i) => (
-                    <button
-                      key={item.name}
-                      aria-pressed={example === i}
-                      onClick={() => setExample(i)}
-                    >
-                      {item.name}
-                    </button>
-                  ))}
-                </div>
-                <div className="example-answer" key={example}>
-                  <span>{current.question}</span>
-                  <p>“{current.objective}”</p>
-                  <div className="answer-stamp">
-                    <Check size={13} />
-                    Self-reported objective
-                  </div>
-                </div>
-                <div className="example-permissions">
-                  <span>Requested actions</span>
-                  <strong>{current.kind}</strong>
-                </div>
-              </section>
-              <section className="preview-trail">
-                <div className="trail-title">
-                  <Path size={19} />
-                  <h2>Follow the visit.</h2>
-                </div>
-                <ol>
-                  {current.pages.map((path, index) => (
-                    <li key={path + index}>
-                      <span className="trail-node">
-                        <FileText size={13} />
-                      </span>
-                      <div>
-                        <span>Page viewed</span>
-                        <code>{path}</code>
-                      </div>
-                      <Check size={13} />
-                    </li>
-                  ))}
-                  <li className="trail-result">
-                    <span className="trail-node">
-                      <Check size={14} />
-                    </span>
-                    <div>
-                      <span>Observed outcome</span>
-                      <strong>{current.result}</strong>
-                    </div>
-                  </li>
-                </ol>
-                <p>
-                  What the visitor said. What your website observed.
-                  <br />
-                  Kept separate, connected in one visit.
-                </p>
-              </section>
-            </div>
-            <div className="preview-foot">
-              <span>
-                <span className="signal-dot" />
-                Questions you choose. Context you can inspect.
-              </span>
-              <a href="/app">
-                See the working product <ArrowUpRight size={15} />
-              </a>
+            <div className="m-hero-footnote">
+              Your questions. Their original destination.
+              <br />A small introduction, not a new workflow.
             </div>
           </div>
-          <div className="hero-bottom">
-            <span>Made for the web’s other visitors.</span>
-            <div>
-              <span>Browser agents</span>
-              <span>HTTP clients</span>
-              <span>AI crawlers</span>
-              <span>Computer use</span>
+          <div className="m-doorway" aria-label="Interactive product example">
+            <div className="m-demo-header">
+              <span className="m-site-dot" />
+              <span>your-website.com / pricing</span>
+              <span className="m-demo-tag">Example</span>
+            </div>
+            <div className="m-demo-path">
+              <span className={step === 0 ? 'current' : ''}>Arrives</span>
+              <span>→</span>
+              <span className={step === 1 ? 'current' : ''}>Introduces task</span>
+              <span>→</span>
+              <span className={step === 2 ? 'current' : ''}>Continues</span>
+            </div>
+            <div className="m-demo-body">
+              {step === 0 ? (
+                <>
+                  <div className="m-agent-symbol">↳</div>
+                  <span className="m-demo-label">An ordinary agent visit</span>
+                  <h2>“Find the right plan for our team.”</h2>
+                  <p>
+                    The agent follows a search result to your pricing page. Nobody has told it about
+                    Arrival.
+                  </p>
+                  <button className="m-button" onClick={() => setStep(1)}>
+                    Follow the visit
+                  </button>
+                </>
+              ) : step === 1 ? (
+                <>
+                  <span className="m-demo-label">A quick introduction</span>
+                  <h2>You’re in the right place.</h2>
+                  <p>A little context, then back to the pricing page.</p>
+                  <label htmlFor="example-task">What are you here to do?</label>
+                  <textarea
+                    id="example-task"
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value)}
+                    rows={2}
+                  />
+                  <button
+                    className="m-button"
+                    onClick={() => setStep(2)}
+                    disabled={!objective.trim()}
+                  >
+                    Continue to the website
+                  </button>
+                  <small>No account. No CAPTCHA. A short task summary.</small>
+                </>
+              ) : (
+                <>
+                  <div className="m-success-symbol">✓</div>
+                  <span className="m-demo-label">Back to the original task</span>
+                  <h2>The pricing page is open.</h2>
+                  <div className="m-receipt">
+                    <span>Declared task</span>
+                    <p>{objective}</p>
+                    <span>Observed next</span>
+                    <p>/pricing → /docs → /integrations</p>
+                  </div>
+                  <button className="m-text-link" onClick={() => setStep(0)}>
+                    Replay the example
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="m-demo-footer">
+              Illustrative visit. Real visits appear only in your private workspace.
             </div>
           </div>
         </section>
-
-        <section id="product" className="product-section landing-section">
-          <div className="section-intro">
-            <span className="section-label light-label">Intent and activity, in one place</span>
-            <h2>
-              Go beyond
-              <br />
-              another bot count.
-            </h2>
+        <section className="m-experience" id="experience">
+          <div className="m-section-title">
+            <span>The introduction</span>
+            <h2>Keep the task moving.</h2>
+            <p>An agent shouldn’t need a new mission to tell you about its current one.</p>
+          </div>
+          <div className="m-flow-list">
+            <article>
+              <span className="m-flow-number">1</span>
+              <div>
+                <h3>It arrives naturally.</h3>
+                <p>
+                  A search result, a citation, a link. Arrival meets recognized interactive agents
+                  at the page they requested.
+                </p>
+              </div>
+              <div className="m-flow-sample">GET /your-page</div>
+            </article>
+            <article>
+              <span className="m-flow-number">2</span>
+              <div>
+                <h3>Your website asks.</h3>
+                <p>
+                  A readable introduction uses your questions. Forms and a URL-based path
+                  accommodate different tool capabilities.
+                </p>
+              </div>
+              <div className="m-flow-sample">A sentence is plenty.</div>
+            </article>
+            <article>
+              <span className="m-flow-number">3</span>
+              <div>
+                <h3>It carries on.</h3>
+                <p>
+                  An expiring, site-bound pass preserves the destination. Subsequent visits in the
+                  session don’t repeat the questions.
+                </p>
+              </div>
+              <div className="m-flow-sample">Continue /your-page</div>
+            </article>
+          </div>
+        </section>
+        <section className="m-understand" id="understand">
+          <div className="m-section-title">
+            <span>The workspace</span>
+            <h2>A visit has more to tell you.</h2>
             <p>
-              A request tells you a page was fetched. Arrival gives you a place to ask about the
-              task behind it.
+              What the agent says, where it connects from, and what you actually observe—kept
+              distinct.
             </p>
-            <a className="underlined-link" href="/app">
-              Explore your visit records <ArrowUpRight size={18} />
+            <a className="m-text-link" href="/start">
+              Create your private workspace
             </a>
           </div>
-          <div className="product-details">
-            <article>
-              <span className="detail-symbol">
-                <ListChecks size={24} />
-              </span>
+          <div className="m-evidence">
+            <div className="m-evidence-row">
+              <span className="m-evidence-icon">?</span>
               <div>
-                <h3>Ask your own questions.</h3>
+                <h3>Intent, in its own words</h3>
                 <p>
-                  Objectives, evaluation criteria, discovery sources, and whatever matters to your
-                  website. Make answers required or leave them optional.
+                  Your questions, declared objectives and the answer version that each visitor saw.
                 </p>
-                <div className="question-sample">
-                  <span>What would make this visit successful?</span>
-                  <div>
-                    A short answer, in the visitor’s own words.
-                    <span className="sample-cursor" />
-                  </div>
-                </div>
               </div>
-            </article>
-            <article>
-              <span className="detail-symbol">
-                <Path size={24} />
-              </span>
+              <small>Self-reported</small>
+            </div>
+            <div className="m-evidence-row">
+              <span className="m-evidence-icon">↗</span>
               <div>
-                <h3>See what actually happened.</h3>
+                <h3>The path through your website</h3>
                 <p>
-                  Connect declared purpose to page views, searches, downloads, and recorded actions.
-                  Inspect the original evidence and export the record.
+                  Page arrivals, answers and continuation. See where introductions complete or stop
+                  producing signals.
                 </p>
-                <div className="inline-trail">
-                  <code>/docs</code>
-                  <span className="trail-connector" />
-                  <code>/pricing</code>
-                  <span className="trail-connector" />
-                  <span className="outcome-tag">
-                    <Check size={13} />
-                    Downloaded
-                  </span>
-                </div>
               </div>
-            </article>
-            <article>
-              <span className="detail-symbol">
-                <Code size={24} />
-              </span>
+              <small>Observed / reported</small>
+            </div>
+            <div className="m-evidence-row">
+              <span className="m-evidence-icon">◎</span>
               <div>
-                <h3>Connect the way your site works.</h3>
+                <h3>Countries, states and networks</h3>
                 <p>
-                  A browser script for optional check-in and interaction data. A server collector
-                  for requests that never execute JavaScript.
+                  Approximate IP location and ASN ownership. Useful context without pretending to
+                  identify the person behind the agent.
                 </p>
-                <div className="connection-tags">
-                  <span>Browser script</span>
-                  <span>Wix · Shopify · Next.js</span>
-                  <span>HTTP API</span>
-                </div>
               </div>
-            </article>
+              <small>IP-derived</small>
+            </div>
           </div>
         </section>
-
-        <section id="how-it-works" className="how-section landing-section">
-          <div className="section-heading">
-            <span className="section-label light-label">A simple first conversation</span>
-            <h2>
-              From “who’s there?”
-              <br />
-              to “here’s what happened.”
-            </h2>
-            <p>Three parts. One record you can actually understand.</p>
-          </div>
-          <div className="how-steps">
-            <article>
-              <span className="step-tag">01 / Connect</span>
-              <h3>Give visits a place to land.</h3>
-              <p>
-                Add the browser tracker or report requests from your server. Start with the open
-                demo to see the complete flow.
-              </p>
-              <span className="step-icon">
-                <Code size={36} />
-              </span>
-            </article>
-            <article>
-              <span className="step-tag">02 / Ask</span>
-              <h3>Let the visitor explain.</h3>
-              <p>
-                Choose your questions. Browser agents can open a small optional prompt; HTTP agents
-                can discover a structured reporting API.
-              </p>
-              <span className="step-icon">
-                <ListChecks size={36} />
-              </span>
-            </article>
-            <article>
-              <span className="step-tag">03 / Understand</span>
-              <h3>Keep the task and the trail.</h3>
-              <p>
-                Read the answers beside recorded activity. Inspect signals, filter visits, and take
-                the data with you.
-              </p>
-              <span className="step-icon">
-                <Path size={36} />
-              </span>
-            </article>
-          </div>
-          <p className="honesty-note">
-            <span className="signal-dot" />
-            Your website stays open. Questions are optional, the prompt never takes focus, and
-            collection failures do not block the task.
-          </p>
-        </section>
-
-        <section id="build-status" className="status-section landing-section">
-          <div className="section-heading">
-            <span className="section-label light-label">Open about where we are</span>
-            <h2>
-              A real MVP.
-              <br />
-              An honest to-build list.
-            </h2>
-            <p>What is implemented now, what comes next, and what runs underneath.</p>
-          </div>
-          <BuildStatus compact />
-        </section>
-
-        <section className="faq-section landing-section">
-          <h2>
-            A few things
-            <br />
-            worth knowing.
-          </h2>
+        <section className="m-install" id="installation">
           <div>
-            <article>
-              <h3>Can Arrival identify every agent?</h3>
-              <p>
-                No. This MVP uses basic request and browser signals. Unknown visitors remain
-                unknown, and operator identities are unverified.
-              </p>
-            </article>
-            <article>
-              <h3>Does it know the original user prompt?</h3>
-              <p>
-                No. A visitor can share a task summary through your questionnaire. That declaration
-                is kept separate from observed activity.
-              </p>
-            </article>
-            <article>
-              <h3>Can I use it on my website?</h3>
-              <p>
-                Copy the snippet for Wix, Shopify, Next.js, or any website that accepts custom code.
-                Host Arrival on HTTPS for remote collection. HTTP-only crawler requests also need
-                server or CDN collection.
-              </p>
-            </article>
+            <span className="m-kicker">Set up, then manage from here</span>
+            <h2>
+              A client integration.
+              <br />
+              Not a custom project.
+            </h2>
+            <p>
+              Create a workspace. Install the package. Set your environment variables and deploy.
+              Questions and entry behavior stay configurable in your dashboard.
+            </p>
+            <a className="m-button" href="/start">
+              Connect your website
+            </a>
+          </div>
+          <div className="m-install-sheet">
+            <div>
+              <span>Next.js</span>
+              <span>Server entry + browser signals</span>
+            </div>
+            <pre>{"export { middleware } from '@arrival/next';"}</pre>
+            <p>
+              The setup screen provides the versioned package URL and your workspace’s exact
+              configuration.
+            </p>
+            <div className="m-install-separator" />
+            <div>
+              <span>Wix, Shopify, HTML</span>
+              <span>Browser collection</span>
+            </div>
+            <p>
+              A snippet collects browser signals and shows a gentle prompt. Enforcing questions
+              before HTTP content requires a server or edge integration.
+            </p>
           </div>
         </section>
-
-        <section className="landing-final">
-          <span className="section-label">Say hello to the other side of your traffic.</span>
-          <h2>
-            Give every arrival
-            <br />a little more context.
-          </h2>
-          <a className="landing-button black-button" href="/app">
-            Open your workspace <ArrowUpRight size={20} />
-          </a>
+        <section className="m-honest">
+          <h2>Good introductions need honest boundaries.</h2>
+          <div>
+            <p>
+              Robots.txt and discovery links are guidance, not access control. The server
+              integration enforces the question step for detected interactive agents while it is
+              healthy.
+            </p>
+            <p>
+              Agent detection is imperfect. Browser impersonation can evade it. Search indexers
+              continue without questions, and collector outages don’t take your website down.
+              Arrival measures the response; it cannot promise zero churn.
+            </p>
+            <p>
+              Answers are declarations. IPs may locate a proxy or remote browser. This MVP does not
+              verify agent identity or recover private prompts.
+            </p>
+          </div>
         </section>
       </main>
-      <footer className="landing-footer">
-        <Wordmark />
-        <p>Agent visits, with context.</p>
+      <footer className="marketing-footer">
+        <a className="marketing-brand" href="/">
+          arrival<span>↗</span>
+        </a>
+        <p>A thoughtful first hello for the agent web.</p>
         <div>
-          <a href="#build-status">Stack & build status</a>
-          <a href="/app">Workspace</a>
-          <a href="/lab">
-            Try check-in <ArrowUpRight size={14} />
-          </a>
+          <a href="/login">Customer sign in</a>
+          <a href="https://github.com/maskjelly/arrival">Source & documentation</a>
         </div>
       </footer>
     </div>

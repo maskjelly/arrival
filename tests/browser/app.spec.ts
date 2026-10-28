@@ -3,40 +3,39 @@ import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
 import { installSnippet } from '../../src/install.ts';
 import AxeBuilder from '@axe-core/playwright';
+const summarize = (violations: any[]) =>
+  violations.map((v) => ({
+    id: v.id,
+    nodes: v.nodes.map((n: any) => ({ target: n.target, reason: n.failureSummary })),
+  }));
 
-test('public landing page has interactive examples, build status, and working app navigation', async ({
+test('public landing explains a natural agent arrival and demonstrates the introduction', async ({
   page,
 }) => {
-  const errors: string[] = [];
   const ownerRequests: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('request', (request) => {
-    if (request.url().includes('/api/admin') || request.url().includes('/api/auth'))
-      ownerRequests.push(request.url());
+  page.on('request', (r) => {
+    if (r.url().includes('/api/admin') || r.url().includes('/api/auth'))
+      ownerRequests.push(r.url());
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Get to know why.');
-  await page.getByRole('button', { name: 'Compare', exact: true }).click();
-  await expect(page.locator('.example-answer')).toContainText('six-person team');
-  await expect(page.getByText('Illustrative visit', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Built & next', exact: true }).click();
-  await expect(page.getByText('Working today', { exact: true })).toBeVisible();
-  await expect(page.getByText('Verified operator identities', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(
+    'Meet the agents at your door.',
+  );
+  await page.getByRole('button', { name: 'Follow the visit' }).click();
+  await page.getByLabel('What are you here to do?').fill('Evaluate a plan for a six-person team.');
+  await page.getByRole('button', { name: 'Continue to the website' }).click();
+  await expect(page.getByRole('heading', { name: 'The pricing page is open.' })).toBeVisible();
+  await expect(page.locator('.m-receipt')).toContainText('six-person team');
   expect(ownerRequests).toEqual([]);
   mkdirSync('.data/screenshots', { recursive: true });
-  await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({ path: '.data/screenshots/landing-desktop.png', fullPage: true });
+  const a11y = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+  expect(summarize(a11y.violations)).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '.data/screenshots/landing-mobile.png', fullPage: true });
-  await page.getByRole('button', { name: 'Open menu' }).click();
-  await page.getByRole('link', { name: 'How it works', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
-  await page.getByRole('link', { name: 'Explore the workspace', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Agent traffic', exact: true })).toBeVisible();
-  expect(page.url()).toContain('/app');
-  expect(errors).toEqual([]);
+  await page.getByRole('link', { name: 'Set up Arrival', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Start with your website.' })).toBeVisible();
 });
 
 test('dashboard runs an actual agent and exposes its answers, events and export', async ({
@@ -143,6 +142,7 @@ test('installation setup offers copyable platform snippets and checks real colle
 }) => {
   await page.goto('/app');
   await page.getByRole('link', { name: 'Connect a website', exact: true }).click();
+  await page.getByText('Other platforms and browser-only collection', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Paste once. Keep browsing.' })).toBeVisible();
   await page.getByRole('tab', { name: 'Wix', exact: true }).click();
   await expect(page.getByRole('tabpanel')).toContainText('Settings → Custom Code');
@@ -304,12 +304,13 @@ test('workspace views support direct links, keyboard navigation and accessible c
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
       .analyze();
-    expect(results.violations, view).toEqual([]);
+    expect(summarize(results.violations), view).toEqual([]);
   }
   await page.goto('/app?view=integration');
   await expect(
     page.getByRole('heading', { name: 'Connect your website', exact: true }),
   ).toBeVisible();
+  await page.getByText('Other platforms and browser-only collection', { exact: true }).click();
   await page.getByRole('tab', { name: 'Any website', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('tab', { name: 'Wix', exact: true })).toHaveAttribute(
@@ -340,7 +341,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
   const mobile = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
-  expect(mobile.violations).toEqual([]);
+  expect(summarize(mobile.violations)).toEqual([]);
   await page.goto('/app?view=sessions');
   await page.locator('.mobile-visit-card').first().click();
   const drawer = page.getByRole('dialog', { name: 'Visit details' });
@@ -350,7 +351,7 @@ test('workspace views support direct links, keyboard navigation and accessible c
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
       .analyze();
-    expect(results.violations, tab).toEqual([]);
+    expect(summarize(results.violations), tab).toEqual([]);
   }
   await page.keyboard.press('Escape');
   await expect(drawer).not.toBeVisible();
@@ -413,6 +414,7 @@ test('populated origins and long IPv6 connection details stay readable and acces
       asnResolved: 1,
       publicAddresses: 1,
       countries: [{ code: 'US', name: 'United States', count: 1 }],
+      regions: [{ countryCode: 'US', name: 'California', count: 1 }],
       providers: [{ name: 'Cloudflare, Inc.', count: 1 }],
     };
     const v = data.sessions[0];
@@ -428,6 +430,7 @@ test('populated origins and long IPv6 connection details stay readable and acces
         countryCode: 'US',
         country: 'United States',
         city: 'San Francisco',
+        region: 'California',
         approximate: true,
       },
       asn: { number: 13335, organization: 'Cloudflare, Inc.' },
@@ -456,7 +459,10 @@ test('populated origins and long IPv6 connection details stay readable and acces
   let results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze();
-  expect(results.violations).toEqual([]);
+  expect(summarize(results.violations)).toEqual([]);
+  await page.getByRole('button', { name: 'States & regions', exact: true }).click();
+  await page.getByRole('button', { name: /California/ }).click();
+  await expect(page.locator('.filter-chip').filter({ hasText: 'California' })).toBeVisible();
   await page.getByRole('button', { name: 'Inspect network for IPv6 interface fixture' }).click();
   const drawer = page.getByRole('dialog');
   await expect(drawer.locator('.network-address-card')).toContainText(ip);
@@ -464,7 +470,30 @@ test('populated origins and long IPv6 connection details stay readable and acces
   await expect(drawer).toContainText('HTTP/2.0 at host server');
   await page.setViewportSize({ width: 390, height: 844 });
   results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
-  expect(results.violations).toEqual([]);
+  expect(summarize(results.violations)).toEqual([]);
   expect(await drawer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('a customer creates a workspace and signs back into its own dashboard', async ({ page }) => {
+  await page.goto('/start');
+  await page.getByLabel('Website', { exact: true }).fill('https://new-client.test');
+  await page.getByLabel('Workspace address').fill('new-client');
+  await page.getByLabel('Workspace password').fill('new-client-long-password');
+  await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'new-client.test is ready to connect.' }),
+  ).toBeVisible();
+  await expect(page.locator('.customer-setup')).toContainText('NEXT_PUBLIC_ARRIVAL_SITE_ID=site_');
+  await page.getByRole('link', { name: 'Open your dashboard' }).click();
+  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  const overview = await (await page.request.get('/api/admin/overview')).json();
+  expect(overview.site.workspace).toBe('new-client');
+  expect(overview.total).toBe(0);
+  expect(overview.site.entryMode).toBe('ask');
+  await page.request.post('/api/auth/logout');
+  await page.reload();
+  await page.getByLabel('Workspace password').fill('new-client-long-password');
+  await page.getByRole('button', { name: 'Open workspace' }).click();
+  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
 });

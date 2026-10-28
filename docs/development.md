@@ -35,7 +35,7 @@ The app stores records in `.data/arrival.sqlite`. Restarting preserves visits, q
 4. In **Connect a website**, save your website's exact origin and copy the tracking script. Choose suspected automation, every visitor, or tracking only.
 5. For HTTP-only request evidence, generate a server ingestion key and install the Express or Web Request helper. See [platform installation](integrations.md).
 
-Questions are voluntary and dismissible. The prompt stays collapsed until opened, and telemetry failure never changes website access. Detection is heuristic. Blocking is not part of the installation. Existing databases preserve their saved advanced demo policy; turn it off in Questions to use observation.
+Browser-only prompts are dismissible. The full Next.js integration presents the question step to recognized interactive agents and browser-reported automation. Its clearance resumes the original URL; outages still leave the website available. Create customer workspaces at `/start`; `/app/<workspace>` uses that customer password. Detection is heuristic. Blocking is not part of the installation. Existing databases preserve their saved advanced demo policy; turn it off in Questions to use observation.
 
 ## HTTP check-in
 
@@ -75,6 +75,6 @@ Set the password through your deployment's private environment, not client code.
 
 Configuration: `PORT` (default 3000), `HOST` (default 127.0.0.1), `DATABASE_PATH`, `ADMIN_PASSWORD`, `TRUST_PROXY`, `PUBLIC_URL` (public collector origin used in snippets and manifests), `GEOIP_CITY_PATH` and `GEOIP_ASN_PATH` (local DB-IP Lite MMDB files).
 
-Hosted operation uses durable Turso and awaited storage calls; see [Vercel setup](vercel.md). Local SQLite statements execute synchronously behind the same async interface. This MVP has one site and one owner; there is no durable ingestion queue or automatic retention job, and dashboard/export queries currently return the latest 300 visits; a visit timeline returns at most 1,500 events. The all-time chart displays the latest seven days. Records beyond display limits remain in SQLite. It is not a production multi-tenant service.
+Hosted operation uses durable Turso and awaited storage calls; see [Vercel setup](vercel.md). Local SQLite statements execute synchronously behind the same async interface. This MVP supports separate customer workspaces with one website each; there is no durable ingestion queue or automatic retention job, and dashboard/export queries currently return the latest 300 visits; a visit timeline returns at most 1,500 events. The all-time chart displays the latest seven days. Records beyond display limits remain in SQLite. It is not a production multi-tenant service.
 
 See [the stack and build status](build-status.md), [the implemented architecture](architecture.md).

@@ -3,6 +3,22 @@
   if (!script?.src) return;
   const siteId = script.dataset.site;
   const external = !!siteId;
+  // Browser-reported automation can request the same server introduction used by HTTP agents.
+  // This is a cooperative signal, not proof or an anti-spoofing boundary.
+  if (
+    external &&
+    script.dataset.entry === 'ask' &&
+    navigator.webdriver &&
+    !document.cookie.split(';').some((c) => c.trim() === 'arrival_introduced=1')
+  ) {
+    const destination = new URL(location.href);
+    if (!destination.searchParams.has('__arrival_browser')) {
+      destination.searchParams.set('__arrival_browser', '1');
+      location.replace(destination.href);
+      return;
+    }
+  }
+
   if (window.arrival?.siteId === (siteId || 'gateway')) return;
   const server = new URL(script.src, location.href).origin;
   const checkInMode = script.dataset.checkIn || 'agents';

@@ -17,6 +17,9 @@ export type Evidence = {
   note?: string;
 };
 export type Site = {
+  workspace?: string;
+  entryMode?: 'ask' | 'observe';
+  entryMessage?: string;
   id: string;
   name: string;
   origin: string;
@@ -117,6 +120,7 @@ export type VisitEvent = {
   data: Record<string, unknown>;
 };
 export type Overview = {
+  entry?: { prompted: number; answered: number; continued: number };
   site: Site;
   sessions: Visit[];
   total: number;
@@ -138,6 +142,7 @@ export type Overview = {
     publicAddresses: number;
     total: number;
     countries: { code: string; name: string; count: number }[];
+    regions?: { countryCode: string; name: string; count: number }[];
     providers: { name: string; count: number }[];
     status: NetworkStatus;
   };

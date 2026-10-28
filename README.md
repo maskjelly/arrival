@@ -1,43 +1,38 @@
 # Arrival
 
-Agent observability without getting in the way. Collect visit activity and optional task summaries while your website stays open.
+Agent introductions and website analytics. An agent follows a normal link to your website, meets a short question step, then continues to its original destination. The customer sees declared intent alongside observed requests, country/state estimates and network ownership.
 
-- Configure questions and inspect declared objectives alongside request/browser evidence.
-- Collect visits with a browser embed or server adapter.
-- Inspect exit IPs, approximate locations, ASN ownership and inferred hosting networks with local lookups.
-- Paste a snippet into any HTML site, Wix, Shopify or Next.js; no client package or private key.
-- Offer a small nonmodal prompt and a structured reporting protocol for HTTP agents.
-- Keep records in SQLite and export JSON or CSV.
+## Use
 
-## Run
+Create a customer workspace at `/start`. Install the versioned Next.js package and follow the generated setup. Manage questions, entry behavior and analytics from `/app/<workspace>`.
 
-Requires Node.js 24+.
+- Server entry for recognized interactive agents; an expiring, site-bound pass avoids repeated questions.
+- Browser-reported automation can use the same introduction. Human-looking clients cannot be detected reliably.
+- Native forms and URL-based submissions support different agent tools. No user-supplied test instructions are required for discovery.
+- Country/state/ASN analytics and a questions → answers → continuation funnel.
+- Isolated customer workspaces, password sign-in, scoped ingestion keys, JSON/CSV exports.
+- Local SQLite or durable Turso storage on Vercel. IP lookup uses local DB-IP Lite datasets.
+
+A browser snippet alone can observe visits and offer a prompt on HTML, Wix or Shopify sites; it cannot enforce HTTP questions. The Next.js server integration is the full MVP installation. Search indexers continue without questions, and collector outages fail open. Answers are self-reported; IPs may describe a proxy. This is not universal bot detection or a security firewall, and zero churn is not guaranteed.
+
+## Develop
+
+Node.js 24+:
 
 ```sh
 npm ci
 cp .env.example .env
+npm run geo:update
 npm run dev
 ```
 
-Open the [landing page](http://127.0.0.1:3000), [workspace](http://127.0.0.1:3000/app), or [open demo](http://127.0.0.1:3000/lab). Use **Run a demo agent** to capture an actual, labeled test visit. No model API key is needed.
-
-Enable location and ASN lookup in **Connect a website**, or run `npm run geo:update` before starting. Visitor IPs stay local during lookup. [Network data and accuracy](docs/network-data.md).
-
-## Stack
-
-React, TypeScript, Vite, Express, SQLite, Zod, and local DB-IP Lite databases. Native CSS with self-hosted fonts.
-
-Vercel deployments use durable Turso storage. [Deployment and phone-agent testing](docs/vercel.md).
-
-## Check
+Open `/` for the product, `/start` for onboarding, or `/app` for the local operator workspace. The local `/lab` demonstration remains separate from customer installations.
 
 ```sh
 npx playwright install chromium
 npm run check
 ```
 
-## Status
+React, TypeScript, Vite, Express, SQLite/Turso, Zod, Manrope and native CSS. No model key is required.
 
-Single-site, single-owner MVP. Questions are optional and collection never blocks your website. Agent identities are unverified; answers are self-reported. Automatic HTTP-only request logging requires a server/log integration; a browser snippet alone cannot see it. A reachable HTTPS collector is needed for external sites.
-
-[Install on your website](docs/integrations.md) · [Setup and operation](docs/development.md) · [Architecture](docs/architecture.md) · [Built and next](docs/build-status.md)
+[Customer installation](packages/next/README.md) · [Architecture](docs/architecture.md) · [Vercel](docs/vercel.md) · [Network data](docs/network-data.md) · [Build status](docs/build-status.md)

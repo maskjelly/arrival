@@ -65,12 +65,15 @@ export function OriginsPage({
 }) {
   const [country, setCountry] = useState(''),
     [provider, setProvider] = useState(''),
-    [search, setSearch] = useState('');
+    [search, setSearch] = useState(''),
+    [region, setRegion] = useState(''),
+    [geography, setGeography] = useState<'country' | 'region'>('country');
   const network = data.network;
   const visits = data.sessions.filter(
     (v) =>
       (!country || v.network?.location?.countryCode === country) &&
       (!provider || v.network?.asn?.organization === provider) &&
+      (!region || v.network?.location?.region === region) &&
       (!search ||
         [
           v.agentName,
@@ -128,12 +131,53 @@ export function OriginsPage({
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Connection locations</h2>
+              <h2>Visitor locations</h2>
               <p>Estimated from the exit IP, not the user’s location</p>
             </div>
             <MapPin size={18} />
           </div>
-          {network.countries.length ? (
+          <div className="geo-tabs" role="group" aria-label="Location breakdown">
+            <button
+              aria-pressed={geography === 'country'}
+              onClick={() => {
+                setGeography('country');
+                setRegion('');
+              }}
+            >
+              Countries
+            </button>
+            <button aria-pressed={geography === 'region'} onClick={() => setGeography('region')}>
+              States & regions
+            </button>
+          </div>
+          {geography === 'region' ? (
+            <div className="origin-rank-list">
+              {(network.regions ?? [])
+                .filter((r) => !country || r.countryCode === country)
+                .map((r) => (
+                  <button
+                    key={r.countryCode + r.name}
+                    aria-pressed={region === r.name && country === r.countryCode}
+                    onClick={() => {
+                      setCountry(r.countryCode);
+                      setRegion(region === r.name ? '' : r.name);
+                    }}
+                  >
+                    <span className="country-code">{r.countryCode}</span>
+                    <span>{r.name}</span>
+                    <strong>{r.count}</strong>
+                  </button>
+                ))}
+              {!(network.regions ?? []).length && (
+                <div className="origin-empty">
+                  <p>No states or regions resolved yet.</p>
+                  <small>
+                    Public IP estimates appear when the local dataset has regional coverage.
+                  </small>
+                </div>
+              )}
+            </div>
+          ) : network.countries.length ? (
             <div className="origin-rank-list">
               {network.countries.map((c) => (
                 <button
@@ -198,12 +242,13 @@ export function OriginsPage({
               Showing {visits.length} of the latest {data.sessions.length} visits
             </p>
           </div>
-          {(country || provider || search) && (
+          {(country || provider || search || region) && (
             <button
               className="text-button"
               onClick={() => {
                 setCountry('');
                 setProvider('');
+                setRegion('');
                 setSearch('');
               }}
             >
@@ -219,6 +264,7 @@ export function OriginsPage({
             onChange={(e) => setSearch(e.target.value)}
           />
           {country && <span className="filter-chip">Country: {country}</span>}
+          {region && <span className="filter-chip">State / region: {region}</span>}
           {provider && <span className="filter-chip">Network: {provider}</span>}
         </div>
         {visits.length ? (

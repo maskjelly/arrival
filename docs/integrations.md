@@ -1,3 +1,9 @@
+# Integration guide
+
+For the complete customer installation, use [Arrival for Next.js](../packages/next/README.md). Create a workspace at `/start`; use its generated site ID, key, middleware export and browser component. This includes the automatic entry question step.
+
+The examples below describe browser-only prompts and lower-level request reporting. They remain useful for HTML/Wix/Shopify or custom adapters, but do not enforce a question before HTTP content. Browser and server records remain separate.
+
 # Install Arrival
 
 Arrival observes visits without restricting website access. Check-in is optional. No CAPTCHA, redirect or access token is required to browse your website.
@@ -163,7 +169,7 @@ There are no automatic form-input, page-text or private-prompt captures. Follow 
 
 ## Deployment and limits
 
-The Arrival collector itself must be hosted separately with HTTPS, owner authentication, persistent SQLite storage and backups. This is a self-hosted single-site MVP, not an already-operated multi-tenant SaaS. Native Wix/Shopify apps, complete CDN log connectors, durable delivery and automatic retention are still to build. The platform steps were checked against official documentation; authenticated installs on actual Wix or Shopify stores have not been tested in this workspace.
+The Arrival collector itself must be hosted separately with HTTPS, owner authentication, persistent SQLite storage and backups. Customer workspaces and hosted Turso storage are implemented; the local operator demonstration is separate from customer installations. Native Wix/Shopify apps, complete CDN log connectors, durable delivery and automatic retention are still to build. The platform steps were checked against official documentation; authenticated installs on actual Wix or Shopify stores have not been tested in this workspace.
 
 ## IP location and network ownership
 

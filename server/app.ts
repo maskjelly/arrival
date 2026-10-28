@@ -8,7 +8,6 @@ import { NetworkEnricher } from './geo.ts';
 import { addressInfo, captureNetwork, reportedNetwork } from './network.ts';
 import { catalog, gatePage, labPage, checkInPage } from './pages.ts';
 import type { Question, Visit } from '../src/types.ts';
-
 const text = (max = 2000) => z.string().trim().max(max);
 const questionSchema = z
   .object({
@@ -150,23 +149,31 @@ function answerErrors(questions: Question[], answers: Visit['answers']) {
   }
   return fields;
 }
-
-export function createApp(
+export async function createApp(
   options: {
     databasePath?: string;
     adminPassword?: string;
-    trustedProxy?: string;
+    trustedProxy?: string | number;
     publicOrigin?: string;
     networkService?: NetworkEnricher;
+    databaseConnection?: {
+      url: string;
+      authToken: string;
+    };
+    backfillOnStart?: boolean;
   } = {},
 ) {
-  const store = new Store(options.databasePath ?? resolve('.data/arrival.sqlite'));
+  const store = new Store(
+    options.databasePath ?? resolve('.data/arrival.sqlite'),
+    options.databaseConnection,
+  );
+  await store.ready;
   const network = options.networkService ?? new NetworkEnricher();
-  const refreshNetworkArchive = () => {
+  const refreshNetworkArchive = async () => {
     let updated = 0;
-    for (const visit of store.list('1970')) {
+    for (const visit of await store.list('1970')) {
       const context = visit.network;
-      store.network(
+      await store.network(
         visit.id,
         context
           ? {
@@ -182,7 +189,7 @@ export function createApp(
     }
     return updated;
   };
-  if (network.status().enabled) refreshNetworkArchive();
+  if (network.status().enabled && options.backfillOnStart !== false) await refreshNetworkArchive();
   if (options.publicOrigin) {
     const url = new URL(options.publicOrigin);
     if (!['http:', 'https:'].includes(url.protocol))
@@ -205,7 +212,13 @@ export function createApp(
     res.set('Cache-Control', 'no-store');
     next();
   });
-  const limits = new Map<string, { count: number; reset: number }>();
+  const limits = new Map<
+    string,
+    {
+      count: number;
+      reset: number;
+    }
+  >();
   function rateLimit(prefix: string, max: number) {
     return (req: Request, res: Response, next: NextFunction) => {
       const key = `${prefix}:${req.ip}`,
@@ -226,23 +239,25 @@ export function createApp(
       next();
     };
   }
-  function owner(req: Request, res: Response, next: NextFunction) {
+  async function owner(req: Request, res: Response, next: NextFunction) {
     const token = cookies(req).arrival_owner;
     if (
       !token ||
-      !store.db
+      !(await store.db
         .prepare('SELECT 1 FROM admin_sessions WHERE token_hash=? AND expires_at>?')
-        .get(hash(token), new Date().toISOString())
+        .get(hash(token), new Date().toISOString()))
     ) {
       res.status(401).json({ error: 'Sign in to access the dashboard.' });
       return;
     }
     next();
   }
-  function ownerSession(req: Request, res: Response) {
+  async function ownerSession(req: Request, res: Response) {
     const token = credential();
-    store.db.prepare('DELETE FROM admin_sessions WHERE expires_at<?').run(new Date().toISOString());
-    store.db
+    await store.db
+      .prepare('DELETE FROM admin_sessions WHERE expires_at<?')
+      .run(new Date().toISOString());
+    await store.db
       .prepare('INSERT INTO admin_sessions VALUES (?,?)')
       .run(hash(token), new Date(Date.now() + 28800000).toISOString());
     res.cookie('arrival_owner', token, {
@@ -254,7 +269,7 @@ export function createApp(
     });
   }
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'arrival' }));
-  app.post('/api/auth/local', freshRequest, rateLimit('auth', 15), (req, res) => {
+  app.post('/api/auth/local', freshRequest, rateLimit('auth', 15), async (req, res) => {
     let localHost = false;
     try {
       localHost = ['localhost', '127.0.0.1', '[::1]'].includes(
@@ -267,10 +282,10 @@ export function createApp(
       res.status(401).json({ error: 'An owner password is required.', requiresPassword: true });
       return;
     }
-    ownerSession(req, res);
+    await ownerSession(req, res);
     res.json({ ok: true, mode: 'local-only' });
   });
-  app.post('/api/auth/login', freshRequest, rateLimit('auth', 15), (req, res) => {
+  app.post('/api/auth/login', freshRequest, rateLimit('auth', 15), async (req, res) => {
     const body = validate(z.object({ password: text(256) }).strict(), req.body, res);
     if (!body) return;
     if (
@@ -280,75 +295,85 @@ export function createApp(
       res.status(401).json({ error: 'The password did not match.' });
       return;
     }
-    ownerSession(req, res);
+    await ownerSession(req, res);
     res.json({ ok: true });
   });
-  app.post('/api/auth/logout', freshRequest, (req, res) => {
-    store.db
+  app.post('/api/auth/logout', freshRequest, async (req, res) => {
+    await store.db
       .prepare('DELETE FROM admin_sessions WHERE token_hash=?')
       .run(hash(cookies(req).arrival_owner ?? ''));
     res.clearCookie('arrival_owner');
     res.json({ ok: true });
   });
   app.use('/api/admin', freshRequest, owner);
-  app.get('/api/admin/site', (_req, res) => res.json(store.site()));
+  app.get('/api/admin/site', async (_req, res) => res.json(await store.site()));
   app.get('/api/admin/network', (_req, res) => res.json(network.status()));
   app.post('/api/admin/network/update', rateLimit('geo-update', 3), (_req, res) => {
+    if (network.readOnly) {
+      res.status(405).json({ error: 'IP datasets are updated during deployment.' });
+      return;
+    }
     void network
       .update()
-      .then(() => {
-        if (network.status().enabled) refreshNetworkArchive();
+      .then(async () => {
+        if (network.status().enabled) await refreshNetworkArchive();
       })
       .catch(() => {});
     res.status(202).json(network.status());
   });
-  app.post('/api/admin/network/backfill', (_req, res) =>
-    res.json({ updated: refreshNetworkArchive(), status: network.status() }),
+  app.post('/api/admin/network/backfill', async (_req, res) =>
+    res.json({ updated: await refreshNetworkArchive(), status: network.status() }),
   );
-  app.get('/api/admin/installation', (_req, res) => {
-    const browser = store.db
+  app.get('/api/admin/installation', async (_req, res) => {
+    const browser = await store.db
       .prepare(
         "SELECT MAX(created_at) AS lastSeen, COUNT(DISTINCT session_id) AS visits FROM events WHERE type='page_view' AND source='browser reported' AND json_extract(data,'$.origin')=?",
       )
-      .get(store.site().origin);
-    const server = store.db
+      .get((await store.site()).origin);
+    const server = await store.db
       .prepare(
         "SELECT MAX(updated_at) AS lastSeen, COUNT(*) AS visits FROM sessions WHERE source='server'",
       )
       .get();
     res.json({ browser, server });
   });
-  app.put('/api/admin/site', (req, res) => {
+  app.put('/api/admin/site', async (req, res) => {
     const body = validate(configSchema, req.body, res);
     if (!body) return;
-    res.json(store.updateSite({ ...body, origin: new URL(body.origin).origin }));
+    res.json(await store.updateSite({ ...body, origin: new URL(body.origin).origin }));
   });
-  app.post('/api/admin/ingest-key', (_req, res) => res.json({ key: store.rotateKey() }));
-  app.get('/api/admin/overview', (req, res) => {
+  app.post('/api/admin/ingest-key', async (_req, res) =>
+    res.json({ key: await store.rotateKey() }),
+  );
+  app.get('/api/admin/overview', async (req, res) => {
     const range = req.query.range === '7d' ? '7d' : req.query.range === 'all' ? 'all' : '24h';
     const since =
       range === 'all'
         ? '1970'
         : new Date(Date.now() - (range === '7d' ? 7 : 1) * 86400000).toISOString();
-    const sessions = store.list(since);
-    const stat = store.db
+    const sessions = await store.list(since);
+    const stat = (await store.db
       .prepare(
         `SELECT COUNT(*) AS visits, SUM(CASE WHEN status='admitted' AND expires_at>? THEN 1 ELSE 0 END) AS admitted, SUM(CASE WHEN answers!='{}' THEN 1 ELSE 0 END) AS answered, SUM(CASE WHEN classification!='unknown' THEN 1 ELSE 0 END) AS automated, SUM(is_demo) AS demo FROM sessions WHERE created_at>=?`,
       )
-      .get(new Date().toISOString(), since)!;
-    const totalEvents = store.db
+      .get(new Date().toISOString(), since))!;
+    const totalEvents = (await store.db
       .prepare('SELECT COUNT(*) AS n FROM events WHERE created_at>=?')
-      .get(since)!;
-    const chart: { time: string; visits: number; events: number }[] = [];
+      .get(since))!;
+    const chart: {
+      time: string;
+      visits: number;
+      events: number;
+    }[] = [];
     const hourly = range === '24h';
     const step = hourly ? 3600000 : 86400000;
     const start = Math.floor((Date.now() - (hourly ? 23 : 6) * step) / step) * step;
-    const buckets = store.db
+    const buckets = await store.db
       .prepare(
         `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM events WHERE created_at>=? GROUP BY bucket`,
       )
       .all(new Date(start).toISOString());
-    const visitBuckets = store.db
+    const visitBuckets = await store.db
       .prepare(
         `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM sessions WHERE created_at>=? GROUP BY bucket`,
       )
@@ -362,17 +387,17 @@ export function createApp(
         events: Number(buckets.find((b) => b.bucket === key)?.n ?? 0),
       });
     }
-    const pages = store.db
+    const pages = await store.db
       .prepare(
         "SELECT path, COUNT(*) AS count FROM events WHERE type='page_view' AND created_at>=? GROUP BY path ORDER BY count DESC LIMIT 6",
       )
       .all(since);
-    const sources = store.db
+    const sources = await store.db
       .prepare(
         'SELECT agent_name AS name, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY agent_name ORDER BY count DESC LIMIT 5',
       )
       .all(since);
-    const networkCounts = store.db
+    const networkCounts = (await store.db
       .prepare(
         `SELECT COUNT(DISTINCT json_extract(network,'$.location.countryCode')) AS countryCount,
       SUM(CASE WHEN json_extract(network,'$.location.countryCode') IS NOT NULL THEN 1 ELSE 0 END) AS located,
@@ -380,22 +405,22 @@ export function createApp(
       SUM(CASE WHEN json_extract(network,'$.scope')='public' THEN 1 ELSE 0 END) AS publicAddresses
       FROM sessions WHERE created_at>=?`,
       )
-      .get(since)!;
-    const countries = store.db
+      .get(since))!;
+    const countries = await store.db
       .prepare(
         `SELECT json_extract(network,'$.location.countryCode') AS code,
       json_extract(network,'$.location.country') AS name, COUNT(*) AS count FROM sessions
       WHERE created_at>=? AND json_extract(network,'$.location.countryCode') IS NOT NULL GROUP BY code ORDER BY count DESC LIMIT 6`,
       )
       .all(since);
-    const providers = store.db
+    const providers = await store.db
       .prepare(
         `SELECT json_extract(network,'$.asn.organization') AS name, COUNT(*) AS count FROM sessions
       WHERE created_at>=? AND json_extract(network,'$.asn.organization') IS NOT NULL GROUP BY name ORDER BY count DESC LIMIT 6`,
       )
       .all(since);
     res.json({
-      site: store.site(),
+      site: await store.site(),
       sessions,
       total: Number(stat.visits),
       stats: {
@@ -422,27 +447,27 @@ export function createApp(
       serverTime: new Date().toISOString(),
     });
   });
-  app.get('/api/admin/sessions/:id', (req, res) => {
-    const visit = store.get(String(req.params.id));
+  app.get('/api/admin/sessions/:id', async (req, res) => {
+    const visit = await store.get(String(req.params.id));
     if (!visit) {
       res.status(404).json({ error: 'Visit not found.' });
       return;
     }
-    res.json({ visit, events: store.events(visit.id) });
+    res.json({ visit, events: await store.events(visit.id) });
   });
-  app.post('/api/admin/sessions/:id/revoke', (req, res) => {
-    const visit = store.get(String(req.params.id));
+  app.post('/api/admin/sessions/:id/revoke', async (req, res) => {
+    const visit = await store.get(String(req.params.id));
     if (!visit) {
       res.status(404).json({ error: 'Visit not found.' });
       return;
     }
-    store.revoke(visit.id);
+    await store.revoke(visit.id);
     res.json({ ok: true });
   });
-  app.get('/api/admin/export', (req, res) => {
+  app.get('/api/admin/export', async (req, res) => {
     const sessions = req.query.session
-      ? [store.get(String(req.query.session))].filter((v): v is Visit => !!v)
-      : store.list('1970');
+      ? [await store.get(String(req.query.session))].filter((v): v is Visit => !!v)
+      : await store.list('1970');
     if (req.query.format === 'csv') {
       const cell = (v: unknown) => {
         let s = String(v ?? '');
@@ -506,21 +531,22 @@ export function createApp(
     res.attachment('arrival-visits.json').json({
       exportedAt: new Date().toISOString(),
       note: 'Latest 300 visits. Client identities and task answers are unverified unless separately documented. No verification service is connected.',
-      site: store.site(),
+      site: await store.site(),
       networkAttribution: network.status().provider,
-      visits: sessions.map((visit) => ({ ...visit, events: store.events(visit.id) })),
+      visits: await Promise.all(
+        sessions.map(async (visit) => ({ ...visit, events: await store.events(visit.id) })),
+      ),
     });
   });
-
-  function current(req: Request, res: Response): Visit | undefined {
-    const visit = store.byToken(sessionToken(req));
+  async function current(req: Request, res: Response): Promise<Visit | undefined> {
+    const visit = await store.byToken(sessionToken(req));
     if (!visit || visit.status === 'revoked' || visit.status === 'expired') {
       res.status(401).json({ error: 'This session is unavailable or expired. Start a new visit.' });
       return;
     }
     return visit;
   }
-  app.post('/api/agent/check-in', rateLimit('checkin', 90), (req, res) => {
+  app.post('/api/agent/check-in', rateLimit('checkin', 90), async (req, res) => {
     const body = validate(
       z
         .object({
@@ -534,7 +560,7 @@ export function createApp(
       res,
     );
     if (!body) return;
-    const visit = store.byToken(body.sessionToken);
+    const visit = await store.byToken(body.sessionToken);
     if (
       !visit ||
       !['gateway', 'agent'].includes(visit.source) ||
@@ -552,7 +578,7 @@ export function createApp(
     }
     const fields = answerErrors(visit.questions, body.answers);
     if (Object.keys(fields).length) {
-      store.event(
+      await store.event(
         visit.id,
         'check_in_failed',
         '/api/agent/check-in',
@@ -562,8 +588,12 @@ export function createApp(
       res.status(422).json({ error: 'Check the highlighted answers.', fields });
       return;
     }
-    if (!store.site().requireAdmission || visit.status === 'observed' || visit.source === 'agent') {
-      store.declare(visit.id, body.answers, 'agent reported');
+    if (
+      !(await store.site()).requireAdmission ||
+      visit.status === 'observed' ||
+      visit.source === 'agent'
+    ) {
+      await store.declare(visit.id, body.answers, 'agent reported');
       res.json({
         ok: true,
         sessionId: visit.id,
@@ -580,38 +610,43 @@ export function createApp(
       ...(Array.isArray(actions) && actions.includes('Search') ? ['search'] : []),
       ...(Array.isArray(actions) && actions.includes('Download files') ? ['download'] : []),
     ];
-    const token = store.admit(visit.id, body.answers, permissions);
+    const token = await store.admit(visit.id, body.answers, permissions);
     setVisitCookie(req, res, token);
     res.json({
       sessionId: visit.id,
       sessionToken: token,
       permissions,
-      expiresAt: store.get(visit.id)!.expiresAt,
+      expiresAt: (await store.get(visit.id))!.expiresAt,
       identityVerified: false,
       continueTo: visit.entryPath,
     });
   });
-  app.post('/api/agent/environment', freshRequest, rateLimit('telemetry', 600), (req, res) => {
-    const visit = current(req, res);
-    if (!visit) return;
-    const env = validate(environmentSchema, req.body, res);
-    if (!env) return;
-    store.environment(visit.id, env);
-    store.event(
-      visit.id,
-      'browser_context',
-      cleanPath(visit.entryPath),
-      { fields: Object.keys(env) },
-      { method: 'POST', source: 'browser reported' },
-    );
-    res.json({ ok: true });
-  });
-  app.post('/api/agent/events', freshRequest, rateLimit('telemetry', 600), (req, res) => {
-    const visit = current(req, res);
+  app.post(
+    '/api/agent/environment',
+    freshRequest,
+    rateLimit('telemetry', 600),
+    async (req, res) => {
+      const visit = await current(req, res);
+      if (!visit) return;
+      const env = validate(environmentSchema, req.body, res);
+      if (!env) return;
+      await store.environment(visit.id, env);
+      await store.event(
+        visit.id,
+        'browser_context',
+        cleanPath(visit.entryPath),
+        { fields: Object.keys(env) },
+        { method: 'POST', source: 'browser reported' },
+      );
+      res.json({ ok: true });
+    },
+  );
+  app.post('/api/agent/events', freshRequest, rateLimit('telemetry', 600), async (req, res) => {
+    const visit = await current(req, res);
     if (!visit) return;
     const body = validate(eventSchema, req.body, res);
     if (!body) return;
-    store.event(
+    await store.event(
       visit.id,
       body.type,
       cleanPath(body.path),
@@ -620,9 +655,8 @@ export function createApp(
     );
     res.json({ ok: true });
   });
-
-  function manifest(req: Request) {
-    const site = store.site(),
+  async function manifest(req: Request) {
+    const site = await store.site(),
       base = store.collectorOrigin ?? `${req.protocol}://${req.get('host')}`;
     return {
       version: '1.0',
@@ -647,37 +681,39 @@ export function createApp(
       identityVerified: false,
     };
   }
-  app.get(['/.well-known/arrival.json', '/api/agent/manifest/:siteId'], (req, res) => {
-    if (req.params.siteId && req.params.siteId !== store.site().id) {
+  app.get(['/.well-known/arrival.json', '/api/agent/manifest/:siteId'], async (req, res) => {
+    if (req.params.siteId && req.params.siteId !== (await store.site()).id) {
       res.status(404).json({ error: 'Site not found.' });
       return;
     }
     res
       .set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' })
-      .json(manifest(req));
+      .json(await manifest(req));
   });
-  app.get('/check-in/:siteId', (req, res) => {
-    if (req.params.siteId !== store.site().id) {
+  app.get('/check-in/:siteId', async (req, res) => {
+    if (req.params.siteId !== (await store.site()).id) {
       res.sendStatus(404);
       return;
     }
-    res.set('Cache-Control', 'no-store').type('html').send(checkInPage(store.site()));
+    res
+      .set('Cache-Control', 'no-store')
+      .type('html')
+      .send(checkInPage(await store.site()));
   });
-
-  app.use(['/lab', '/api/lab'], rateLimit('gateway', 600), (req, res, next) => {
+  app.use(['/lab', '/api/lab'], rateLimit('gateway', 600), async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     let token = sessionToken(req),
-      visit = store.byToken(token);
+      visit = await store.byToken(token);
     if (
       !visit ||
       visit.source !== 'gateway' ||
       visit.status === 'expired' ||
       visit.status === 'revoked' ||
-      (store.site().requireAdmission && visit.status === 'observed')
+      ((await store.site()).requireAdmission && visit.status === 'observed')
     ) {
       const userAgent = (req.get('user-agent') ?? '').slice(0, 1000),
         ip = addressInfo(req.ip ?? '').ip;
-      const created = store.createSession({
+      const created = await store.createSession({
         source: 'gateway',
         userAgent,
         ip,
@@ -689,7 +725,7 @@ export function createApp(
       token = created.token;
       visit = created.visit;
       setVisitCookie(req, res, token);
-      store.event(
+      await store.event(
         visit.id,
         'arrival',
         cleanPath(req.originalUrl),
@@ -697,20 +733,20 @@ export function createApp(
         { method: req.method },
       );
     }
-    store.network(visit.id, captureNetwork(req, network.lookup));
+    await store.network(visit.id, captureNetwork(req, network.lookup));
     res.locals.visit = visit;
     res.locals.arrival = {
       token,
       questions: visit.questions,
-      optional: !store.site().requireAdmission,
+      optional: !(await store.site()).requireAdmission,
       answered: Object.keys(visit.answers).length > 0,
     };
     res.set(
       'Link',
-      `</api/agent/manifest/${store.site().id}>; rel="alternate"; type="application/json"; title="Optional agent check-in"`,
+      `</api/agent/manifest/${(await store.site()).id}>; rel="alternate"; type="application/json"; title="Optional agent check-in"`,
     );
-    if (store.site().requireAdmission && visit.status !== 'admitted') {
-      store.event(
+    if ((await store.site()).requireAdmission && visit.status !== 'admitted') {
+      await store.event(
         visit.id,
         'gate_presented',
         cleanPath(req.originalUrl),
@@ -738,11 +774,11 @@ export function createApp(
         ? 'download'
         : 'read';
     if (
-      store.site().requireAdmission &&
+      (await store.site()).requireAdmission &&
       visit.status === 'admitted' &&
       !visit.permissions.includes(permission)
     ) {
-      store.event(
+      await store.event(
         visit.id,
         'access_denied',
         cleanPath(req.originalUrl),
@@ -754,9 +790,15 @@ export function createApp(
     }
     next();
   });
-  app.get('/lab/download/specification.json', (req, res) => {
+  app.get('/lab/download/specification.json', async (req, res) => {
     const visit: Visit = res.locals.visit;
-    store.event(visit.id, 'download', req.path, { file: 'specification.json' }, { status: 200 });
+    await store.event(
+      visit.id,
+      'download',
+      req.path,
+      { file: 'specification.json' },
+      { status: 200 },
+    );
     res.attachment('northstar-specification.json').json({
       product: 'Northstar demonstration',
       version: '1.0',
@@ -764,13 +806,13 @@ export function createApp(
       sampleContent: true,
     });
   });
-  app.get('/api/lab/search', (req, res) => {
+  app.get('/api/lab/search', async (req, res) => {
     const query = String(req.query.q ?? '').slice(0, 120),
       visit: Visit = res.locals.visit;
     const results = catalog.filter((c) =>
       `${c.title} ${c.text}`.toLowerCase().includes(query.toLowerCase()),
     );
-    store.event(
+    await store.event(
       visit.id,
       'search',
       '/api/lab/search',
@@ -779,25 +821,25 @@ export function createApp(
     );
     res.json({ results });
   });
-  app.post('/api/lab/shortlist', freshRequest, (req, res) => {
+  app.post('/api/lab/shortlist', freshRequest, async (req, res) => {
     const visit: Visit = res.locals.visit;
     const body = validate(z.object({ plan: z.literal('Team') }).strict(), req.body, res);
     if (!body) return;
-    store.event(visit.id, 'shortlist_saved', '/api/lab/shortlist', body, {
+    await store.event(visit.id, 'shortlist_saved', '/api/lab/shortlist', body, {
       method: 'POST',
       status: 200,
     });
     res.json({ ok: true });
   });
-  app.get(/^\/lab(?:\/.*)?$/, (req, res) => {
+  app.get(/^\/lab(?:\/.*)?$/, async (req, res) => {
     const visit: Visit = res.locals.visit;
     const path = req.path.replace(/\/$/, '') || '/lab';
     if (!['/lab', ...catalog.map((c) => c.path)].includes(path)) {
-      store.event(visit.id, 'not_found', path, {}, { status: 404 });
+      await store.event(visit.id, 'not_found', path, {}, { status: 404 });
       res.status(404).send('Page not found.');
       return;
     }
-    store.event(visit.id, 'page_view', path, {}, { status: 200 });
+    await store.event(visit.id, 'page_view', path, {}, { status: 200 });
     const html = labPage(path, visit, res.locals.arrival);
     if ((req.get('accept') ?? '').includes('application/json')) {
       res.json({
@@ -811,33 +853,32 @@ export function createApp(
       });
     } else res.type('html').send(html);
   });
-
   const collectorPaths = ['/api/collect/:siteId', '/api/agent/collect/:siteId'];
-  function collectorOrigin(req: Request) {
+  async function collectorOrigin(req: Request) {
     const origin = req.get('origin');
     return (
-      origin === store.site().origin ||
+      origin === (await store.site()).origin ||
       origin === `${req.protocol}://${req.get('host')}` ||
       (!origin && req.path.startsWith('/api/agent/collect/'))
     );
   }
-  app.options(collectorPaths, (req, res) => {
-    if (String(req.params.siteId) !== store.site().id || !collectorOrigin(req)) {
+  app.options(collectorPaths, async (req, res) => {
+    if (String(req.params.siteId) !== (await store.site()).id || !(await collectorOrigin(req))) {
       res.sendStatus(403);
       return;
     }
     res
       .set({
-        'Access-Control-Allow-Origin': req.get('origin') ?? store.site().origin,
+        'Access-Control-Allow-Origin': req.get('origin') ?? (await store.site()).origin,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         Vary: 'Origin',
       })
       .sendStatus(204);
   });
-  app.post(collectorPaths, rateLimit('collect', 600), (req, res) => {
-    const site = store.site();
-    if (String(req.params.siteId) !== site.id || !collectorOrigin(req)) {
+  app.post(collectorPaths, rateLimit('collect', 600), async (req, res) => {
+    const site = await store.site();
+    if (String(req.params.siteId) !== site.id || !(await collectorOrigin(req))) {
       res.status(403).json({ error: 'Configure this website’s exact origin in Arrival first.' });
       return;
     }
@@ -862,7 +903,7 @@ export function createApp(
       res,
     );
     if (!body) return;
-    let visit = store.byToken(bearer(req));
+    let visit = await store.byToken(bearer(req));
     if (body.type === 'start') {
       let token: string | undefined;
       if (
@@ -873,7 +914,7 @@ export function createApp(
       ) {
         const ua = (req.get('user-agent') ?? '').slice(0, 1000),
           ip = addressInfo(req.ip ?? '').ip;
-        const created = store.createSession({
+        const created = await store.createSession({
           source: channel,
           isDemo: ua.startsWith('Arrival-DemoAgent/'),
           userAgent: ua,
@@ -885,9 +926,9 @@ export function createApp(
         visit = created.visit;
         token = created.token;
       }
-      store.network(visit.id, captureNetwork(req, network.lookup));
-      if (body.environment) store.environment(visit.id, body.environment, provenance);
-      store.event(
+      await store.network(visit.id, captureNetwork(req, network.lookup));
+      if (body.environment) await store.environment(visit.id, body.environment, provenance);
+      await store.event(
         visit.id,
         'page_view',
         cleanPath(body.path),
@@ -927,7 +968,7 @@ export function createApp(
         res.status(422).json({ error: 'Please complete the required questions.', fields });
         return;
       }
-      store.declare(visit.id, body.answers, provenance);
+      await store.declare(visit.id, body.answers, provenance);
       res.json({ ok: true, enforced: false });
       return;
     }
@@ -936,7 +977,7 @@ export function createApp(
       return;
     }
     const event = body.event;
-    store.event(
+    await store.event(
       visit.id,
       event.type,
       cleanPath(event.path),
@@ -945,8 +986,8 @@ export function createApp(
     );
     res.json({ ok: true });
   });
-  app.post('/api/ingest', rateLimit('ingest', 600), (req, res) => {
-    if (!store.keyValid(bearer(req))) {
+  app.post('/api/ingest', rateLimit('ingest', 600), async (req, res) => {
+    if (!(await store.keyValid(bearer(req)))) {
       res.status(401).json({ error: 'A valid server ingestion key is required.' });
       return;
     }
@@ -974,25 +1015,27 @@ export function createApp(
       res,
     );
     if (!body) return;
-    const existing = store.db
+    const existing = await store.db
       .prepare('SELECT session_id FROM events WHERE dedupe_key=?')
       .get(`ingest:${body.eventId}`);
     if (existing) {
       res.json({ sessionId: existing.session_id, inserted: false });
       return;
     }
-    let visit = store.byExternal(`server:${body.sessionId}`);
+    let visit = await store.byExternal(`server:${body.sessionId}`);
     if (!visit)
-      visit = store.createSession({
-        source: 'server',
-        externalKey: `server:${body.sessionId}`,
-        userAgent: body.userAgent,
-        ip: addressInfo(body.ip ?? '').ip,
-        referrer: cleanReferrer(body.referrer ?? ''),
-        entryPath: cleanPath(body.path),
-        ...identify(body.userAgent, addressInfo(body.ip ?? '').ip, 'integration reported'),
-      }).visit;
-    store.network(
+      visit = (
+        await store.createSession({
+          source: 'server',
+          externalKey: `server:${body.sessionId}`,
+          userAgent: body.userAgent,
+          ip: addressInfo(body.ip ?? '').ip,
+          referrer: cleanReferrer(body.referrer ?? ''),
+          entryPath: cleanPath(body.path),
+          ...identify(body.userAgent, addressInfo(body.ip ?? '').ip, 'integration reported'),
+        })
+      ).visit;
+    await store.network(
       visit.id,
       reportedNetwork(body.ip ?? '', network.lookup, {
         method: body.method,
@@ -1001,7 +1044,7 @@ export function createApp(
         headers: body.headers,
       }),
     );
-    const inserted = store.event(
+    const inserted = await store.event(
       visit.id,
       'request',
       cleanPath(body.path),
@@ -1016,7 +1059,9 @@ export function createApp(
     res.json({ sessionId: visit.id, inserted });
   });
   app.post('/api/admin/run-demo', rateLimit('demo', 10), async (req, res) => {
-    const base = `http://127.0.0.1:${req.socket.localPort}`,
+    const base = options.databaseConnection
+        ? store.collectorOrigin!
+        : `http://127.0.0.1:${req.socket.localPort}`,
       headers = { 'User-Agent': 'Arrival-DemoAgent/1.0', Accept: 'application/json' };
     const first = await fetch(`${base}/lab`, { headers, signal: AbortSignal.timeout(10000) });
     const challenge = await first.json();
@@ -1075,7 +1120,11 @@ export function createApp(
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (res.headersSent) return;
-    const status = (error as { status?: number })?.status;
+    const status = (
+      error as {
+        status?: number;
+      }
+    )?.status;
     console.error(error instanceof Error ? error.message : 'Request failed');
     res.status(status === 413 ? 413 : status === 400 ? 400 : 500).json({
       error:

@@ -4,9 +4,7 @@ import { resolve } from 'node:path';
 import express from 'express';
 import { createApp } from './app.ts';
 import { NetworkEnricher } from './geo.ts';
-
 if (process.argv.includes('--production')) process.env.NODE_ENV = 'production';
-
 const port = Number(process.env.PORT ?? 3000),
   host = process.env.HOST ?? '127.0.0.1';
 if (!['127.0.0.1', 'localhost', '::1'].includes(host) && !process.env.ADMIN_PASSWORD)
@@ -16,8 +14,11 @@ const networkService = new NetworkEnricher({
   asnPath: process.env.GEOIP_ASN_PATH,
 });
 await networkService.load();
-const { app, store } = createApp({
+const { app, store } = await createApp({
   databasePath: process.env.DATABASE_PATH,
+  databaseConnection: process.env.TURSO_DATABASE_URL
+    ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN ?? '' }
+    : undefined,
   adminPassword: process.env.ADMIN_PASSWORD,
   trustedProxy: process.env.TRUST_PROXY,
   publicOrigin: process.env.PUBLIC_URL,

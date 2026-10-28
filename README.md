@@ -27,6 +27,8 @@ Enable location and ASN lookup in **Connect a website**, or run `npm run geo:upd
 
 React, TypeScript, Vite, Express, SQLite, Zod, and local DB-IP Lite databases. Native CSS with self-hosted fonts.
 
+Vercel deployments use durable Turso storage. [Deployment and phone-agent testing](docs/vercel.md).
+
 ## Check
 
 ```sh

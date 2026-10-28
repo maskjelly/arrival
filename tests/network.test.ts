@@ -10,7 +10,6 @@ import { NetworkEnricher } from '../server/geo.ts';
 import { addressInfo, hostingHint, safeHeaders } from '../server/network.ts';
 import { Store } from '../server/store.ts';
 import type { NetworkLookup } from '../src/types.ts';
-
 const fixtureLookup = (ip: string): NetworkLookup =>
   addressInfo(ip).scope === 'public'
     ? {
@@ -38,10 +37,16 @@ const fixtureLookup = (ip: string): NetworkLookup =>
 async function system(trustedProxy?: string, databasePath = ':memory:') {
   const network = new NetworkEnricher();
   network.lookup = fixtureLookup;
-  const { app, store } = createApp({ databasePath, trustedProxy, networkService: network });
+  const { app, store } = await createApp({ databasePath, trustedProxy, networkService: network });
   const server = createServer(app);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const base = `http://127.0.0.1:${
+    (
+      server.address() as {
+        port: number;
+      }
+    ).port
+  }`;
   const request = (path: string, init: RequestInit = {}) => fetch(base + path, init);
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     request(path, {
@@ -61,7 +66,6 @@ async function system(trustedProxy?: string, databasePath = ':memory:') {
   };
   return { request, post, owner, close, store, network };
 }
-
 test('address normalization excludes private, reserved and malformed addresses from public enrichment', () => {
   assert.deepEqual(addressInfo('::ffff:8.8.8.8'), { ip: '8.8.8.8', version: 4, scope: 'public' });
   assert.equal(addressInfo('2001:4860:4860::8888').version, 6);
@@ -93,7 +97,6 @@ test('address normalization excludes private, reserved and malformed addresses f
     { accept: 'text/html', 'accept-language': 'en-US' },
   );
 });
-
 test('untrusted forwarding and country headers cannot replace the observed connection address', async () => {
   const f = await system();
   try {
@@ -107,7 +110,7 @@ test('untrusted forwarding and country headers cannot replace the observed conne
     });
     assert.equal(r.status, 200);
     const data = await r.json();
-    const visit = f.store.byToken(data.sessionToken)!;
+    const visit = (await f.store.byToken(data.sessionToken))!;
     assert.equal(visit.network?.ip, '127.0.0.1');
     assert.equal(visit.network.ipSource, 'direct connection');
     assert.equal(visit.network.enrichment.status, 'non-public address');
@@ -116,7 +119,6 @@ test('untrusted forwarding and country headers cannot replace the observed conne
     await f.close();
   }
 });
-
 test('trusted proxies preserve peer provenance, resolve the exit address and record address changes', async () => {
   const f = await system('loopback');
   try {
@@ -129,7 +131,7 @@ test('trusted proxies preserve peer provenance, resolve the exit address and rec
       },
     });
     const data = await r.json();
-    const first = f.store.byToken(data.sessionToken)!;
+    const first = (await f.store.byToken(data.sessionToken))!;
     assert.equal(first.network?.ip, '8.8.8.8');
     assert.equal(first.network.peerIp, '127.0.0.1');
     assert.equal(first.network.ipSource, 'trusted proxy');
@@ -143,7 +145,7 @@ test('trusted proxies preserve peer provenance, resolve the exit address and rec
       },
     });
     assert.equal(next.status, 200);
-    const visit = f.store.get(first.id)!;
+    const visit = (await f.store.get(first.id))!;
     assert.equal(visit.ip, '8.8.8.8');
     assert.equal(visit.network?.version, 6);
     assert.equal(visit.network.history?.length, 2);
@@ -159,11 +161,10 @@ test('trusted proxies preserve peer provenance, resolve the exit address and rec
     await f.close();
   }
 });
-
 test('reported requests keep integration provenance and never substitute the reporter IP', async () => {
   const f = await system();
   try {
-    const key = f.store.rotateKey();
+    const key = await f.store.rotateKey();
     const headers = { Authorization: `Bearer ${key}` };
     const body = {
       eventId: randomUUID(),
@@ -181,7 +182,7 @@ test('reported requests keep integration provenance and never substitute the rep
     const response = await f.post('/api/ingest', body, headers);
     assert.equal(response.status, 200);
     const id = (await response.json()).sessionId;
-    const noIP = f.store.get(id)!;
+    const noIP = (await f.store.get(id))!;
     assert.equal(noIP.ip, '');
     assert.equal(noIP.network?.ip, '');
     assert.equal(noIP.network.ipSource, 'integration reported');
@@ -192,7 +193,7 @@ test('reported requests keep integration provenance and never substitute the rep
       headers,
     );
     assert.equal(enriched.status, 200);
-    const visit = f.store.get(id)!;
+    const visit = (await f.store.get(id))!;
     assert.equal(visit.network?.location?.countryCode, 'US');
     assert.equal(visit.network.ipSource, 'integration reported');
     assert.equal(visit.network.peerIp, undefined);
@@ -208,7 +209,6 @@ test('reported requests keep integration provenance and never substitute the rep
     await f.close();
   }
 });
-
 test('missing databases and failed updates leave analytics and website content available', async () => {
   const geo = new NetworkEnricher({
     cityPath: '/does-not-exist/city.mmdb',
@@ -247,13 +247,12 @@ test('missing databases and failed updates leave analytics and website content a
     await f.close();
   }
 });
-
 test('existing SQLite visits migrate intact and backfill does not invent a historical capture source', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'arrival-network-'));
   try {
     const path = join(directory, 'visits.sqlite');
     let store = new Store(path);
-    const session = store.createSession({
+    const session = await store.createSession({
       source: 'gateway',
       userAgent: 'TestAgent',
       ip: '8.8.8.8',
@@ -263,13 +262,13 @@ test('existing SQLite visits migrate intact and backfill does not invent a histo
       classification: 'unknown',
       evidence: [],
     });
-    store.declare(session.visit.id, { objective: 'Keep my original task' });
-    const original = store.site();
-    store.db.exec('ALTER TABLE sessions DROP COLUMN network');
+    await store.declare(session.visit.id, { objective: 'Keep my original task' });
+    const original = await store.site();
+    await store.db.exec('ALTER TABLE sessions DROP COLUMN network');
     store.close();
     store = new Store(path);
-    assert.equal(store.get(session.visit.id)!.objective, 'Keep my original task');
-    assert.equal(store.get(session.visit.id)!.network, undefined);
+    assert.equal((await store.get(session.visit.id))!.objective, 'Keep my original task');
+    assert.equal((await store.get(session.visit.id))!.network, undefined);
     store.close();
     const f = await system(undefined, path);
     try {
@@ -278,10 +277,10 @@ test('existing SQLite visits migrate intact and backfill does not invent a histo
         (await f.post('/api/admin/network/backfill', {}, { Cookie: cookie })).status,
         200,
       );
-      const visit = f.store.get(session.visit.id)!;
+      const visit = (await f.store.get(session.visit.id))!;
       assert.equal(visit.network?.ipSource, 'stored address');
       assert.equal(visit.network.location?.countryCode, 'US');
-      assert.deepEqual(f.store.site(), original);
+      assert.deepEqual(await f.store.site(), original);
     } finally {
       await f.close();
     }

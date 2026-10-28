@@ -1,14 +1,18 @@
-import { DatabaseSync } from 'node:sqlite';
+import { Database } from './database.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Evidence, Question, Site, Visit, VisitEvent, NetworkContext } from '../src/types.ts';
-
 export const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const credential = () => randomBytes(32).toString('base64url');
 const now = () => new Date().toISOString();
 const json = <T>(value: unknown): T => JSON.parse(String(value));
 type Row = Record<string, unknown>;
+const sessionSelect = `SELECT s.*,
+ (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id) AS event_count,
+ (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type='page_view') AS page_count,
+ (SELECT json_group_array(DISTINCT type) FROM events e WHERE e.session_id=s.id) AS event_types
+ FROM sessions s`;
 export const defaultQuestions: Question[] = [
   {
     id: 'agent_name',
@@ -60,35 +64,56 @@ export const defaultQuestions: Question[] = [
     options: [],
   },
 ];
-
 export class Store {
-  db: DatabaseSync;
+  db: Database;
+  readonly ready: Promise<void>;
   collectorOrigin?: string;
-  constructor(path: string) {
-    if (path !== ':memory:') {
+  constructor(
+    path: string,
+    connection?: {
+      url: string;
+      authToken: string;
+    },
+  ) {
+    if (!connection && path !== ':memory:') {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     }
-    this.db = new DatabaseSync(path);
-    if (path !== ':memory:') chmodSync(path, 0o600);
-    this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
+    this.db = new Database(path, connection);
+    if (!connection && path !== ':memory:') chmodSync(path, 0o600);
+    this.ready = this.initialize();
+  }
+  private async initialize() {
+    if (!this.db.remote)
+      await this.db.exec(
+        'PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;',
+      );
+    await this.db.exec(`
       CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, origin TEXT NOT NULL, require_admission INTEGER NOT NULL DEFAULT 0, questions_version INTEGER NOT NULL, questions TEXT NOT NULL, ingest_hash TEXT);
-      CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), token_hash TEXT NOT NULL UNIQUE, external_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL, is_demo INTEGER NOT NULL DEFAULT 0, user_agent TEXT NOT NULL, ip TEXT NOT NULL, referrer TEXT NOT NULL, entry_path TEXT NOT NULL, agent_name TEXT NOT NULL, classification TEXT NOT NULL, evidence TEXT NOT NULL, environment TEXT NOT NULL DEFAULT '{}', answers TEXT NOT NULL DEFAULT '{}', questions TEXT NOT NULL, questions_version INTEGER NOT NULL, permissions TEXT NOT NULL DEFAULT '[]', UNIQUE(site_id, external_key));
+      CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), token_hash TEXT NOT NULL UNIQUE, external_key TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL, source TEXT NOT NULL, is_demo INTEGER NOT NULL DEFAULT 0, user_agent TEXT NOT NULL, ip TEXT NOT NULL, referrer TEXT NOT NULL, entry_path TEXT NOT NULL, agent_name TEXT NOT NULL, classification TEXT NOT NULL, evidence TEXT NOT NULL, environment TEXT NOT NULL DEFAULT '{}', answers TEXT NOT NULL DEFAULT '{}', questions TEXT NOT NULL, questions_version INTEGER NOT NULL, permissions TEXT NOT NULL DEFAULT '[]', network TEXT NOT NULL DEFAULT '{}', UNIQUE(site_id, external_key));
       CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), created_at TEXT NOT NULL, type TEXT NOT NULL, path TEXT NOT NULL, method TEXT NOT NULL, status INTEGER, source TEXT NOT NULL, data TEXT NOT NULL, dedupe_key TEXT UNIQUE);
       CREATE INDEX IF NOT EXISTS events_session_time ON events(session_id, created_at);
       CREATE INDEX IF NOT EXISTS sessions_created ON sessions(created_at);
       CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL);
     `);
     if (
-      !this.db
-        .prepare('PRAGMA table_info(sessions)')
-        .all()
-        .some((column) => column.name === 'network')
+      !(await this.db.prepare('PRAGMA table_info(sessions)').all()).some(
+        (column) => column.name === 'network',
+      )
     )
-      this.db.exec("ALTER TABLE sessions ADD COLUMN network TEXT NOT NULL DEFAULT '{}'");
-    if (!this.db.prepare('SELECT id FROM sites LIMIT 1').get())
-      this.db
+      try {
+        await this.db.exec("ALTER TABLE sessions ADD COLUMN network TEXT NOT NULL DEFAULT '{}'");
+      } catch (error) {
+        if (
+          !(await this.db.prepare('PRAGMA table_info(sessions)').all()).some(
+            (c) => c.name === 'network',
+          )
+        )
+          throw error;
+      }
+    if (!(await this.db.prepare('SELECT id FROM sites LIMIT 1').get()))
+      await this.db
         .prepare(
-          'INSERT INTO sites (id,name,origin,questions_version,questions) VALUES (?,?,?,?,?)',
+          'INSERT OR IGNORE INTO sites (id,name,origin,questions_version,questions) VALUES (?,?,?,?,?)',
         )
         .run(
           'site_local',
@@ -98,8 +123,9 @@ export class Store {
           JSON.stringify(defaultQuestions),
         );
   }
-  site(): Site {
-    const row = this.db.prepare('SELECT * FROM sites LIMIT 1').get()!;
+  async site(): Promise<Site> {
+    await this.ready;
+    const row = (await this.db.prepare('SELECT * FROM sites LIMIT 1').get())!;
     return {
       id: String(row.id),
       name: String(row.name),
@@ -111,14 +137,15 @@ export class Store {
       ...(this.collectorOrigin ? { collectorOrigin: this.collectorOrigin } : {}),
     };
   }
-  updateSite(update: {
+  async updateSite(update: {
     name: string;
     origin: string;
     requireAdmission: boolean;
     questions: Question[];
   }) {
-    const old = this.site();
-    this.db
+    await this.ready;
+    const old = await this.site();
+    await this.db
       .prepare(
         'UPDATE sites SET name=?, origin=?, require_admission=?, questions=?, questions_version=? WHERE id=?',
       )
@@ -130,17 +157,23 @@ export class Store {
         old.questionsVersion + 1,
         old.id,
       );
-    return this.site();
+    return await this.site();
   }
-  rotateKey() {
+  async rotateKey() {
+    await this.ready;
     const key = `arr_${credential()}`;
-    this.db.prepare('UPDATE sites SET ingest_hash=? WHERE id=?').run(hash(key), this.site().id);
+    await this.db
+      .prepare('UPDATE sites SET ingest_hash=? WHERE id=?')
+      .run(hash(key), (await this.site()).id);
     return key;
   }
-  keyValid(key: string) {
-    return !!key && !!this.db.prepare('SELECT id FROM sites WHERE ingest_hash=?').get(hash(key));
+  async keyValid(key: string) {
+    await this.ready;
+    return (
+      !!key && !!(await this.db.prepare('SELECT id FROM sites WHERE ingest_hash=?').get(hash(key)))
+    );
   }
-  createSession(input: {
+  async createSession(input: {
     source: Visit['source'];
     userAgent: string;
     ip: string;
@@ -152,13 +185,14 @@ export class Store {
     isDemo?: boolean;
     externalKey?: string;
   }) {
-    const site = this.site(),
+    await this.ready;
+    const site = await this.site(),
       id = randomUUID(),
       token = credential(),
       date = now();
-    this.db
+    const inserted = await this.db
       .prepare(
-        `INSERT INTO sessions (id,site_id,token_hash,external_key,created_at,updated_at,expires_at,status,source,is_demo,user_agent,ip,referrer,entry_path,agent_name,classification,evidence,questions,questions_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR IGNORE INTO sessions (id,site_id,token_hash,external_key,created_at,updated_at,expires_at,status,source,is_demo,user_agent,ip,referrer,entry_path,agent_name,classification,evidence,questions,questions_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         id,
@@ -181,18 +215,18 @@ export class Store {
         JSON.stringify(site.questions),
         site.questionsVersion,
       );
-    return { visit: this.get(id)!, token };
+    if (!inserted.changes) {
+      const existing = input.externalKey ? await this.byExternal(input.externalKey) : undefined;
+      if (!existing) throw new Error('Could not create visit.');
+      return { visit: existing, token: '' };
+    }
+    return { visit: (await this.get(id))!, token };
   }
-  private map(row: Row): Visit {
+  private async map(row: Row): Promise<Visit> {
+    await this.ready;
     const answers = json<Visit['answers']>(row.answers);
-    const counts = this.db
-      .prepare(
-        "SELECT COUNT(*) AS events, SUM(CASE WHEN type='page_view' THEN 1 ELSE 0 END) AS pages FROM events WHERE session_id=?",
-      )
-      .get(String(row.id))!;
-    const types = this.db
-      .prepare('SELECT DISTINCT type FROM events WHERE session_id=?')
-      .all(String(row.id));
+    const counts = { events: row.event_count ?? 0, pages: row.page_count ?? 0 };
+    const types = row.event_types ? json<string[]>(row.event_types) : [];
     const status =
       String(row.status) !== 'revoked' && Date.parse(String(row.expires_at)) <= Date.now()
         ? 'expired'
@@ -224,64 +258,84 @@ export class Store {
       eventCount: Number(counts.events),
       pageCount: Number(counts.pages ?? 0),
       objective: typeof answers.objective === 'string' ? answers.objective : '',
-      eventTypes: types.map((r) => String(r.type)),
+      eventTypes: types,
     };
   }
-  get(id: string) {
-    const row = this.db.prepare('SELECT * FROM sessions WHERE id=?').get(id);
-    return row ? this.map(row) : undefined;
+  async get(id: string) {
+    await this.ready;
+    const row = await this.db.prepare(`${sessionSelect} WHERE s.id=?`).get(id);
+    return row ? await this.map(row) : undefined;
   }
-  network(id: string, context: NetworkContext) {
-    const row = this.db.prepare('SELECT network FROM sessions WHERE id=?').get(id);
-    if (!row) return;
-    const previous = json<Partial<NetworkContext>>(row.network);
-    const changed = !!previous.ip && previous.ip !== context.ip;
-    const history = [...(previous.history ?? [])];
-    if (!previous.ip || changed)
-      history.push({ ip: context.ip, observedAt: context.observedAt, source: context.ipSource });
-    this.db
-      .prepare('UPDATE sessions SET network=? WHERE id=?')
-      .run(JSON.stringify({ ...context, history: history.slice(-8) }), id);
-    if (changed)
-      this.event(
-        id,
-        'network_changed',
-        '/',
-        { previousIp: previous.ip, ip: context.ip },
-        {
-          source:
-            context.ipSource === 'integration reported'
-              ? 'integration reported'
-              : 'server observed',
-        },
-      );
+  async network(id: string, context: NetworkContext) {
+    await this.ready;
+    // Compare-and-swap prevents concurrent requests losing the address history.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const row = await this.db.prepare('SELECT network FROM sessions WHERE id=?').get(id);
+      if (!row) return;
+      const previous = json<Partial<NetworkContext>>(row.network);
+      if (previous.observedAt && previous.observedAt > context.observedAt) return;
+      const changed = !!previous.ip && previous.ip !== context.ip;
+      const history = [...(previous.history ?? [])];
+      if (context.ip && (!previous.ip || changed))
+        history.push({ ip: context.ip, observedAt: context.observedAt, source: context.ipSource });
+      const result = await this.db
+        .prepare('UPDATE sessions SET network=? WHERE id=? AND network=?')
+        .run(JSON.stringify({ ...context, history: history.slice(-8) }), id, String(row.network));
+      if (!result.changes) continue;
+      if (changed)
+        await this.event(
+          id,
+          'network_changed',
+          '/',
+          { previousIp: previous.ip, ip: context.ip },
+          {
+            source:
+              context.ipSource === 'integration reported'
+                ? 'integration reported'
+                : 'server observed',
+          },
+        );
+      return;
+    }
   }
-  byToken(token: string) {
+  async byToken(token: string) {
+    await this.ready;
     if (!token) return undefined;
-    const row = this.db.prepare('SELECT * FROM sessions WHERE token_hash=?').get(hash(token));
-    return row ? this.map(row) : undefined;
+    const row = await this.db.prepare(`${sessionSelect} WHERE s.token_hash=?`).get(hash(token));
+    return row ? await this.map(row) : undefined;
   }
-  byExternal(key: string) {
-    const row = this.db
-      .prepare('SELECT * FROM sessions WHERE site_id=? AND external_key=?')
-      .get(this.site().id, key);
-    return row ? this.map(row) : undefined;
+  async byExternal(key: string) {
+    await this.ready;
+    const row = await this.db
+      .prepare(`${sessionSelect} WHERE s.site_id=? AND s.external_key=?`)
+      .get((await this.site()).id, key);
+    return row ? await this.map(row) : undefined;
   }
-  list(since: string) {
-    return this.db
-      .prepare('SELECT * FROM sessions WHERE created_at>=? ORDER BY created_at DESC LIMIT 300')
-      .all(since)
-      .map((r) => this.map(r));
+  async list(since: string) {
+    await this.ready;
+    return Promise.all(
+      (
+        await this.db
+          .prepare(`${sessionSelect} WHERE s.created_at>=? ORDER BY s.created_at DESC LIMIT 300`)
+          .all(since)
+      ).map((r) => this.map(r)),
+    );
   }
-  event(
+  async event(
     id: string,
     type: string,
     path: string,
     data: Record<string, unknown> = {},
-    options: { method?: string; status?: number; source?: string; dedupeKey?: string } = {},
+    options: {
+      method?: string;
+      status?: number;
+      source?: string;
+      dedupeKey?: string;
+    } = {},
   ) {
+    await this.ready;
     const time = now();
-    const result = this.db
+    const result = await this.db
       .prepare(
         'INSERT OR IGNORE INTO events (id,session_id,created_at,type,path,method,status,source,data,dedupe_key) VALUES (?,?,?,?,?,?,?,?,?,?)',
       )
@@ -298,28 +352,31 @@ export class Store {
         options.dedupeKey ?? null,
       );
     if (Number(result.changes) > 0)
-      this.db.prepare('UPDATE sessions SET updated_at=? WHERE id=?').run(time, id);
+      await this.db.prepare('UPDATE sessions SET updated_at=? WHERE id=?').run(time, id);
     return Number(result.changes) > 0;
   }
-  events(id: string): VisitEvent[] {
-    return this.db
-      .prepare('SELECT * FROM events WHERE session_id=? ORDER BY created_at, rowid LIMIT 1500')
-      .all(id)
-      .map((r) => ({
-        id: String(r.id),
-        sessionId: String(r.session_id),
-        createdAt: String(r.created_at),
-        type: String(r.type),
-        path: String(r.path),
-        method: String(r.method),
-        status: r.status === null ? null : Number(r.status),
-        source: String(r.source),
-        data: json(r.data),
-      }));
+  async events(id: string): Promise<VisitEvent[]> {
+    await this.ready;
+    return (
+      await this.db
+        .prepare('SELECT * FROM events WHERE session_id=? ORDER BY created_at, rowid LIMIT 1500')
+        .all(id)
+    ).map((r) => ({
+      id: String(r.id),
+      sessionId: String(r.session_id),
+      createdAt: String(r.created_at),
+      type: String(r.type),
+      path: String(r.path),
+      method: String(r.method),
+      status: r.status === null ? null : Number(r.status),
+      source: String(r.source),
+      data: json(r.data),
+    }));
   }
-  admit(id: string, answers: Visit['answers'], permissions: string[]) {
+  async admit(id: string, answers: Visit['answers'], permissions: string[]) {
+    await this.ready;
     const token = credential();
-    this.db
+    await this.db
       .prepare(
         "UPDATE sessions SET answers=?, permissions=?, status='admitted', token_hash=?, expires_at=? WHERE id=?",
       )
@@ -330,12 +387,12 @@ export class Store {
         new Date(Date.now() + 3600000).toISOString(),
         id,
       );
-    this.event(
+    await this.event(
       id,
       'check_in',
       '/api/agent/check-in',
       {
-        questionVersion: this.get(id)!.questionsVersion,
+        questionVersion: (await this.get(id))!.questionsVersion,
         permissions,
         identity: 'self-reported, unverified',
       },
@@ -343,28 +400,30 @@ export class Store {
     );
     return token;
   }
-  revoke(id: string) {
-    this.db.prepare("UPDATE sessions SET status='revoked' WHERE id=?").run(id);
-    this.event(id, 'access_revoked', '/', {}, { source: 'owner action' });
+  async revoke(id: string) {
+    await this.ready;
+    await this.db.prepare("UPDATE sessions SET status='revoked' WHERE id=?").run(id);
+    await this.event(id, 'access_revoked', '/', {}, { source: 'owner action' });
   }
-  declare(id: string, answers: Visit['answers'], source = 'browser reported') {
-    this.db
+  async declare(id: string, answers: Visit['answers'], source = 'browser reported') {
+    await this.ready;
+    await this.db
       .prepare("UPDATE sessions SET answers=?, status='observed', permissions='[]' WHERE id=?")
       .run(JSON.stringify(answers), id);
-    this.event(
+    await this.event(
       id,
       'purpose_declared',
-      this.get(id)!.entryPath,
-      { questionVersion: this.get(id)!.questionsVersion, enforced: false },
+      (await this.get(id))!.entryPath,
+      { questionVersion: (await this.get(id))!.questionsVersion, enforced: false },
       { method: 'POST', source, status: 200 },
     );
   }
-  environment(
+  async environment(
     id: string,
     environment: Record<string, unknown>,
     source: 'browser reported' | 'agent reported' = 'browser reported',
   ) {
-    const visit = this.get(id)!;
+    const visit = (await this.get(id))!;
     const evidence = visit.evidence.filter((e) => e.source !== source);
     for (const [name, value] of Object.entries(environment))
       if (value !== undefined && value !== null)
@@ -375,7 +434,7 @@ export class Store {
         });
     const automation =
       environment.webdriver === true || /HeadlessChrome/i.test(String(environment.userAgent ?? ''));
-    this.db
+    await this.db
       .prepare('UPDATE sessions SET environment=?, evidence=?, classification=? WHERE id=?')
       .run(
         JSON.stringify(environment),

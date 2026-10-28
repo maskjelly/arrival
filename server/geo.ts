@@ -28,9 +28,11 @@ export class NetworkEnricher {
     error?: string;
   } = { running: false, stage: 'idle' };
   private loadErrors: string[] = [];
+  readonly readOnly: boolean;
   readonly cityPath: string;
   readonly asnPath: string;
-  constructor(options: { cityPath?: string; asnPath?: string } = {}) {
+  constructor(options: { cityPath?: string; asnPath?: string; readOnly?: boolean } = {}) {
+    this.readOnly = !!options.readOnly;
     this.cityPath = options.cityPath ?? resolve('.data/geo/city.mmdb');
     this.asnPath = options.asnPath ?? resolve('.data/geo/asn.mmdb');
   }
@@ -62,6 +64,7 @@ export class NetworkEnricher {
         : { available: false };
     return {
       enabled: !!(this.city || this.asn),
+      updatesManaged: this.readOnly,
       provider: geoAttribution,
       city: database(this.city),
       asn: database(this.asn),
@@ -130,6 +133,8 @@ export class NetworkEnricher {
     }
   };
   update(month = new Date().toISOString().slice(0, 7)) {
+    if (this.readOnly)
+      return Promise.reject(new Error('IP datasets are managed by the deployment build.'));
     if (this.job) return this.job;
     this.progress = { running: true, stage: 'starting', startedAt: new Date().toISOString() };
     this.job = this.install(month)

@@ -46,7 +46,7 @@ There is no external model call, external authentication provider, Redis, distri
 5. **Durable delivery.** Queues, retry policies, idempotent processing, and outage recovery. The current adapter is best-effort.
 6. **Retention and deletion.** Scheduled policies, owner controls, and audit records. There is no automatic retention job.
 7. **Larger-scale queries.** Pagination, complete exports, and performance work. Current queries show the latest 300 visits and at most 1,500 events per visit.
-8. **Production operations.** Managed HTTPS deployment, monitoring, backups, recovery testing, and deployment procedures. Billing is a later product decision.
+8. **Production operations.** Vercel/Turso deployment is implemented. Monitoring, backups, recovery testing and retention automation remain. Billing is a later product decision.
 
 ## Data boundaries
 

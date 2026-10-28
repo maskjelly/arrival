@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build && npm run geo:update && mkdir -p dist/sdk && cp sdk/*.ts dist/sdk/",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 60,
+      "includeFiles": ".data/geo/*.mmdb"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/.well-known/arrival.json", "destination": "/api/index" },
+    { "source": "/check-in/:path*", "destination": "/api/index" },
+    { "source": "/lab/:path*", "destination": "/api/index" },
+    { "source": "/app", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/tracker.js",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=300" }]
+    },
+    {
+      "source": "/:path*",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

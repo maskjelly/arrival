@@ -435,7 +435,7 @@ export function NetworkSetup() {
       </div>
       <button
         className="button secondary"
-        disabled={busy || status?.job.running}
+        disabled={busy || status?.job.running || status?.updatesManaged}
         onClick={async () => {
           setBusy(true);
           setError('');
@@ -451,11 +451,13 @@ export function NetworkSetup() {
         }}
       >
         {status?.job.running ? <ArrowClockwise size={15} /> : <DownloadSimple size={15} />}{' '}
-        {status?.job.running
-          ? 'Updating IP data…'
-          : status?.enabled
-            ? 'Update databases'
-            : 'Download free IP databases'}
+        {status?.updatesManaged
+          ? 'Updated during deployment'
+          : status?.job.running
+            ? 'Updating IP data…'
+            : status?.enabled
+              ? 'Update databases'
+              : 'Download free IP databases'}
       </button>
       {status?.job.running && (
         <p className="setup-note" role="status">

@@ -2,7 +2,10 @@ export const stack = [
   { name: 'React 19 + TypeScript', role: 'Dashboard, landing page, and typed application code.' },
   { name: 'Vite 8', role: 'Local development and production frontend builds.' },
   { name: 'Node.js + Express 5', role: 'Check-in, permissions, collection, and owner APIs.' },
-  { name: 'SQLite', role: 'Persistent visits, versioned questions, answers, and event history.' },
+  {
+    name: 'SQLite / Turso',
+    role: 'Local SQLite or durable hosted libSQL, with awaited reads and writes.',
+  },
   {
     name: 'DB-IP Lite + MaxMind reader',
     role: 'Offline approximate location and ASN ownership for public IPv4 and IPv6 addresses.',
@@ -47,9 +50,9 @@ export const builtFeatures = [
       'Visit filters, live polling, question editing, integration setup, local owner sessions, and JSON/CSV exports.',
   },
   {
-    title: 'Persistent local storage',
+    title: 'Persistent storage and hosted deployment',
     detail:
-      'SQLite records survive restarts. Tests cover real HTTP and browser journeys, including a separate host website.',
+      'SQLite records survive local restarts; Turso persists hosted records across Vercel instances. Tests cover real HTTP and browser journeys.',
   },
 ];
 
@@ -80,8 +83,8 @@ export const nextFeatures = [
       'Durable queues, retries, pagination beyond current limits, retention rules, and deletion controls.',
   },
   {
-    title: 'Production hosting and operations',
+    title: 'Production operations',
     detail:
-      'Managed HTTPS deployment, monitoring, backups, and operating procedures. Billing can follow if needed.',
+      'Vercel deployment is implemented. Monitoring, backup/recovery testing and retention controls remain to build.',
   },
 ];

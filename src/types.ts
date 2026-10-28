@@ -63,6 +63,7 @@ export type NetworkContext = NetworkLookup & {
   history?: { ip: string; observedAt: string; source: string }[];
 };
 export type NetworkStatus = {
+  updatesManaged?: boolean;
   enabled: boolean;
   provider: { name: string; url: string; license: string; licenseUrl: string };
   city: { available: boolean; builtAt?: string; stale?: boolean; type?: string };

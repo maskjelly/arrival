@@ -51,10 +51,10 @@ An advanced owner switch can still enable demo-only mandatory admission. Its bro
 
 ## Storage and owner access
 
-`server/store.ts` maintains sites, visits, events and hashed owner sessions in SQLite, with WAL, prepared statements and versioned question snapshots. Credentials are excluded from owner inspection and exports. Direct local bootstrap requires a loopback connection and localhost Host; a configured password disables bootstrap. Public-interface binding requires an owner password. Mutations reject foreign origins.
+`server/database.ts` provides awaited access to local Node SQLite or durable Turso over HTTPS. `server/store.ts` maintains sites, visits, events and hashed owner sessions in SQLite, with WAL, prepared statements and versioned question snapshots. Credentials are excluded from owner inspection and exports. Direct local bootstrap requires a loopback connection and localhost Host; a configured password disables bootstrap. Public-interface binding requires an owner password. Mutations reject foreign origins.
 
 The API validates bounded questions, answers, paths and event fields. Agent names and task summaries are unverified claims. IP metadata can describe a proxy, not a user or location. Trust forwarded headers only from configured reverse proxies. The public landing page uses an illustrative visit, not private workspace records.
 
 ## Current limits
 
-One owner/site; synchronous local storage; no durable queue, tenant isolation, retention automation, verified operators or complete CDN log connectors. Display/export limits are the latest 300 visits and 1,500 events per timeline. Records beyond those limits remain in SQLite. HTML snippets do not collect HTTP-only crawler requests on Wix or Shopify. A persistent HTTPS collector is still required for external websites.
+One owner/site; local SQLite or remote Turso storage; no durable queue, tenant isolation, retention automation, verified operators or complete CDN log connectors. Display/export limits are the latest 300 visits and 1,500 events per timeline. Records beyond those limits remain in SQLite. HTML snippets do not collect HTTP-only crawler requests on Wix or Shopify. External websites require the hosted HTTPS collector; see [Vercel setup](vercel.md).

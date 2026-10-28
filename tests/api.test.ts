@@ -10,16 +10,21 @@ import { Store } from '../server/store.ts';
 import express from 'express';
 import { arrivalAnalytics } from '../sdk/arrival.ts';
 import { reportArrival } from '../sdk/web.ts';
-
 async function fixture(password?: string, requireAdmission = true) {
-  const { app, store } = createApp({ databasePath: ':memory:', adminPassword: password });
+  const { app, store } = await createApp({ databasePath: ':memory:', adminPassword: password });
   if (requireAdmission) {
-    const site = store.site();
-    store.updateSite({ ...site, requireAdmission: true });
+    const site = await store.site();
+    await store.updateSite({ ...site, requireAdmission: true });
   }
   const server = createServer(app);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const base = `http://127.0.0.1:${
+    (
+      server.address() as {
+        port: number;
+      }
+    ).port
+  }`;
   const request = (path: string, options: RequestInit = {}) => fetch(base + path, options);
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     request(path, {
@@ -61,11 +66,10 @@ async function fixture(password?: string, requireAdmission = true) {
   };
   return { store, request, post, bootstrap, challenge, admit, answers, close, base };
 }
-
 test('default observation never withholds content, even without answers or after a bad check-in', async () => {
   const f = await fixture(undefined, false);
   try {
-    assert.equal(f.store.site().requireAdmission, false);
+    assert.equal((await f.store.site()).requireAdmission, false);
     const page = await f.request('/lab/pricing', { headers: { Accept: 'text/html' } });
     assert.equal(page.status, 200);
     assert.match(await page.text(), /\$49/);
@@ -87,7 +91,7 @@ test('default observation never withholds content, even without answers or after
     });
     assert.equal(shared.status, 200);
     assert.equal((await shared.json()).enforced, false);
-    const visit = f.store.byToken(context.sessionToken)!;
+    const visit = (await f.store.byToken(context.sessionToken))!;
     assert.equal(visit.status, 'observed');
     assert.deepEqual(visit.permissions, []);
     assert.equal(visit.objective, f.answers.objective);
@@ -102,7 +106,6 @@ test('default observation never withholds content, even without answers or after
     await f.close();
   }
 });
-
 test('HTTP agents discover optional questions, resume a session and submit unverified declarations', async () => {
   const f = await fixture(undefined, false);
   try {
@@ -123,12 +126,12 @@ test('HTTP agents discover optional questions, resume a session and submit unver
         .status,
       200,
     );
-    const visit = f.store.get(session.sessionId)!;
+    const visit = (await f.store.get(session.sessionId))!;
     assert.equal(visit.source, 'agent');
     assert.equal(visit.status, 'observed');
     assert.equal(visit.entryPath, '/docs');
     assert.equal(visit.pageCount, 2);
-    assert.ok(f.store.events(visit.id).every((e) => e.source === 'agent reported'));
+    assert.ok((await f.store.events(visit.id)).every((e) => e.source === 'agent reported'));
     assert.equal(
       (await f.post(path, { type: 'start', path: '/' }, { Origin: 'https://wrong.example' }))
         .status,
@@ -147,11 +150,10 @@ test('HTTP agents discover optional questions, resume a session and submit unver
     await f.close();
   }
 });
-
 test('Web Request adapter sends request evidence without inventing response status and swallows error hooks', async () => {
   const f = await fixture(undefined, false);
   try {
-    const key = f.store.rotateKey();
+    const key = await f.store.rotateKey();
     const request = new Request('https://host.example/docs?private=removed', {
       headers: { 'User-Agent': 'GPTBot/1.0' },
     });
@@ -159,9 +161,9 @@ test('Web Request adapter sends request evidence without inventing response stat
       await reportArrival(request, { endpoint: f.base, key, sessionId: 'nextjs-session' }),
       true,
     );
-    const visit = f.store.list('1970')[0];
+    const visit = (await f.store.list('1970'))[0];
     assert.equal(visit.entryPath, '/docs');
-    assert.equal(f.store.events(visit.id)[0].status, null);
+    assert.equal((await f.store.events(visit.id))[0].status, null);
     assert.equal(
       await reportArrival(request, {
         endpoint: f.base,
@@ -181,13 +183,12 @@ test('Web Request adapter sends request evidence without inventing response stat
     await f.close();
   }
 });
-
 test('disabling advanced admission removes restrictions from existing grants and pending visits', async () => {
   const f = await fixture();
   try {
     const { grant } = await f.admit({ ...f.answers, actions: ['Read pages'] });
     const pending = await f.challenge();
-    f.store.updateSite({ ...f.store.site(), requireAdmission: false });
+    await f.store.updateSite({ ...(await f.store.site()), requireAdmission: false });
     const headers = { Authorization: `Bearer ${grant.sessionToken}` };
     assert.equal((await f.request('/api/lab/search?q=Python', { headers })).status, 200);
     const shared = await f.post('/api/agent/check-in', {
@@ -195,7 +196,7 @@ test('disabling advanced admission removes restrictions from existing grants and
       answers: f.answers,
     });
     assert.equal((await shared.json()).enforced, false);
-    assert.equal(f.store.byToken(pending.sessionToken)!.status, 'observed');
+    assert.equal((await f.store.byToken(pending.sessionToken))!.status, 'observed');
     assert.equal(
       (
         await f.request('/lab/pricing', {
@@ -208,7 +209,6 @@ test('disabling advanced admission removes restrictions from existing grants and
     await f.close();
   }
 });
-
 test('missing or invalid Express collector configuration cannot prevent the host serving content', async () => {
   const app = express();
   app.use(
@@ -225,7 +225,13 @@ test('missing or invalid Express collector configuration cannot prevent the host
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   try {
     const response = await fetch(
-      `http://127.0.0.1:${(server.address() as { port: number }).port}/`,
+      `http://127.0.0.1:${
+        (
+          server.address() as {
+            port: number;
+          }
+        ).port
+      }/`,
     );
     assert.equal(response.status, 200);
     assert.equal(await response.text(), 'Still available');
@@ -234,7 +240,6 @@ test('missing or invalid Express collector configuration cannot prevent the host
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
-
 test('owner routes require authentication; local bootstrap rejects cross-site requests', async () => {
   const f = await fixture();
   try {
@@ -278,7 +283,6 @@ test('owner routes require authentication; local bootstrap rejects cross-site re
     await f.close();
   }
 });
-
 test('password mode disables local bootstrap and authenticates the configured owner', async () => {
   const f = await fixture('a-long-owner-password');
   try {
@@ -298,7 +302,6 @@ test('password mode disables local bootstrap and authenticates the configured ow
     await f.close();
   }
 });
-
 test('gate withholds HTML and API content until required answers are valid', async () => {
   const f = await fixture();
   try {
@@ -333,16 +336,15 @@ test('gate withholds HTML and API content until required answers are valid', asy
     assert.equal((await f.request('/lab/docs', { headers })).status, 200);
     assert.equal((await f.request('/api/lab/search?q=pricing', { headers })).status, 200);
     assert.equal((await f.request('/lab/download/specification.json', { headers })).status, 200);
-    const visit = f.store.get(c.sessionId)!;
+    const visit = (await f.store.get(c.sessionId))!;
     assert.equal(visit.objective, f.answers.objective);
     assert.equal(visit.pageCount, 1);
     assert.ok(visit.eventTypes.includes('download'));
-    assert.equal(f.store.byToken(c.sessionToken), undefined);
+    assert.equal(await f.store.byToken(c.sessionToken), undefined);
   } finally {
     await f.close();
   }
 });
-
 test('permissions, expiry and revocation are enforced on protected routes', async () => {
   const f = await fixture();
   try {
@@ -350,13 +352,13 @@ test('permissions, expiry and revocation are enforced on protected routes', asyn
     const headers = { Authorization: `Bearer ${grant.sessionToken}` };
     assert.equal((await f.request('/api/lab/search?q=api', { headers })).status, 403);
     assert.equal((await f.request('/lab/download/specification.json', { headers })).status, 403);
-    f.store.db
+    await f.store.db
       .prepare('UPDATE sessions SET expires_at=? WHERE id=?')
       .run('2000-01-01T00:00:00.000Z', challenge.sessionId);
-    assert.equal(f.store.get(challenge.sessionId)!.status, 'expired');
+    assert.equal((await f.store.get(challenge.sessionId))!.status, 'expired');
     assert.equal((await f.request('/lab/docs', { headers })).status, 403);
     const next = await f.admit();
-    f.store.revoke(next.challenge.sessionId);
+    await f.store.revoke(next.challenge.sessionId);
     assert.equal(
       (
         await f.request('/lab/pricing', {
@@ -365,18 +367,17 @@ test('permissions, expiry and revocation are enforced on protected routes', asyn
       ).status,
       403,
     );
-    assert.equal(f.store.get(next.challenge.sessionId)!.status, 'revoked');
+    assert.equal((await f.store.get(next.challenge.sessionId))!.status, 'revoked');
   } finally {
     await f.close();
   }
 });
-
 test('question snapshots remain valid across owner edits; labels are HTML escaped', async () => {
   const f = await fixture();
   try {
     const c = await f.challenge();
     const cookie = await f.bootstrap();
-    const original = f.store.site();
+    const original = await f.store.site();
     const questions = [
       ...original.questions,
       {
@@ -403,7 +404,7 @@ test('question snapshots remain valid across owner edits; labels are HTML escape
       answers: f.answers,
     });
     assert.equal(old.status, 200);
-    assert.equal(f.store.get(c.sessionId)!.questionsVersion, original.questionsVersion);
+    assert.equal((await f.store.get(c.sessionId))!.questionsVersion, original.questionsVersion);
     const gate = await f.request('/lab', { headers: { Accept: 'text/html' } });
     const html = await gate.text();
     assert.equal(gate.status, 200);
@@ -420,11 +421,10 @@ test('question snapshots remain valid across owner edits; labels are HTML escape
     await f.close();
   }
 });
-
 test('browser collector restricts origins, preserves unverified provenance, and accepts voluntary answers', async () => {
   const f = await fixture();
   try {
-    const site = f.store.site();
+    const site = await f.store.site();
     assert.equal(
       (
         await f.post(
@@ -468,7 +468,7 @@ test('browser collector restricts origins, preserves unverified provenance, and 
     const event = { id: randomUUID(), type: 'click', path: '/pricing', label: 'Compare plans' };
     await f.post('/api/collect/site_local', { type: 'event', path: '/', event }, headers);
     await f.post('/api/collect/site_local', { type: 'event', path: '/', event }, headers);
-    const visit = f.store.get(data.sessionId)!;
+    const visit = (await f.store.get(data.sessionId))!;
     assert.equal(visit.status, 'observed');
     assert.equal(visit.classification, 'automation signals');
     assert.equal(visit.entryPath, '/pricing');
@@ -476,16 +476,15 @@ test('browser collector restricts origins, preserves unverified provenance, and 
     assert.ok(
       visit.evidence.find((e) => e.name === 'webdriver' && e.source === 'browser reported'),
     );
-    assert.equal(f.store.events(visit.id).filter((e) => e.type === 'click').length, 1);
+    assert.equal((await f.store.events(visit.id)).filter((e) => e.type === 'click').length, 1);
   } finally {
     await f.close();
   }
 });
-
 test('server collection requires a key, is idempotent, and rejects a rotated key', async () => {
   const f = await fixture();
   try {
-    const key = f.store.rotateKey();
+    const key = await f.store.rotateKey();
     const body = {
       eventId: randomUUID(),
       sessionId: 'host-session-123',
@@ -506,12 +505,12 @@ test('server collection requires a key, is idempotent, and rejects a rotated key
       { Authorization: `Bearer ${key}` },
     );
     assert.equal((await repeated.json()).inserted, false);
-    assert.equal(f.store.list('1970').length, 1);
-    const visit = f.store.get(data.sessionId)!;
+    assert.equal((await f.store.list('1970')).length, 1);
+    const visit = (await f.store.get(data.sessionId))!;
     assert.equal(visit.entryPath, '/docs');
     assert.ok(visit.evidence.every((e) => e.source === 'integration reported'));
-    assert.equal(f.store.events(visit.id).length, 1);
-    f.store.rotateKey();
+    assert.equal((await f.store.events(visit.id)).length, 1);
+    await f.store.rotateKey();
     assert.equal(
       (
         await f.post(
@@ -526,7 +525,6 @@ test('server collection requires a key, is idempotent, and rejects a rotated key
     await f.close();
   }
 });
-
 test('export excludes credentials and protects spreadsheet cells from formula execution', async () => {
   const f = await fixture();
   try {
@@ -535,7 +533,7 @@ test('export excludes credentials and protects spreadsheet cells from formula ex
       objective: '=HYPERLINK("https://example.com")',
     });
     const cookie = await f.bootstrap();
-    const key = f.store.rotateKey();
+    const key = await f.store.rotateKey();
     const response = await f.request('/api/admin/export', { headers: { Cookie: cookie } });
     const body = await response.text();
     assert.ok(!body.includes(grant.sessionToken));
@@ -550,7 +548,6 @@ test('export excludes credentials and protects spreadsheet cells from formula ex
     await f.close();
   }
 });
-
 test('controlled demonstration traverses the actual admission and content endpoints', async () => {
   const f = await fixture();
   try {
@@ -558,7 +555,7 @@ test('controlled demonstration traverses the actual admission and content endpoi
     const response = await f.post('/api/admin/run-demo', {}, { Cookie: cookie });
     assert.equal(response.status, 200, await response.clone().text());
     const result = await response.json(),
-      visit = f.store.get(result.sessionId)!;
+      visit = (await f.store.get(result.sessionId))!;
     assert.equal(visit.isDemo, true);
     assert.equal(visit.status, 'admitted');
     assert.equal(visit.pageCount, 4);
@@ -568,13 +565,12 @@ test('controlled demonstration traverses the actual admission and content endpoi
     await f.close();
   }
 });
-
-test('SQLite retains visits and events after reopening the database', () => {
+test('SQLite retains visits and events after reopening the database', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'arrival-'));
   try {
     const file = join(directory, 'test.sqlite');
     let store = new Store(file);
-    const result = store.createSession({
+    const result = await store.createSession({
       source: 'server',
       userAgent: 'test',
       ip: '127.0.0.1',
@@ -582,16 +578,15 @@ test('SQLite retains visits and events after reopening the database', () => {
       entryPath: '/',
       ...{ agentName: 'test', classification: 'unknown' as const, evidence: [] },
     });
-    store.event(result.visit.id, 'request', '/docs');
+    await store.event(result.visit.id, 'request', '/docs');
     store.close();
     store = new Store(file);
-    assert.equal(store.get(result.visit.id)!.eventCount, 1);
+    assert.equal((await store.get(result.visit.id))!.eventCount, 1);
     store.close();
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
-
 test('a reporting adapter failure preserves the host response', async () => {
   let report: (error: Error) => void;
   const error = new Promise<Error>((done) => {
@@ -612,7 +607,15 @@ test('a reporting adapter failure preserves the host response', async () => {
   const server = createServer(app);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   try {
-    const response = await fetch(`http://127.0.0.1:${(server.address() as { port: number }).port}`);
+    const response = await fetch(
+      `http://127.0.0.1:${
+        (
+          server.address() as {
+            port: number;
+          }
+        ).port
+      }`,
+    );
     assert.equal(response.status, 200);
     assert.equal(await response.text(), 'Host content remains available.');
     assert.equal((await error).message, 'Host session is unavailable');

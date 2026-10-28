@@ -19,6 +19,7 @@ async function initialize() {
   const network = new NetworkEnricher({ readOnly: true });
   await network.load();
   return createApp({
+    refreshProviderRanges: true,
     adminPassword: process.env.ADMIN_PASSWORD,
     databaseConnection: {
       url: process.env.TURSO_DATABASE_URL,

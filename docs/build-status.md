@@ -8,6 +8,8 @@
 - Reusable Next.js package and one standard setup flow; browser-only HTML/Wix/Shopify snippets remain available.
 - Question editing and per-visit snapshots; declared objectives separated from observed/integration-reported behavior.
 - Default HTTP retrieval policy: allow content, retain request/network analytics, mark undeclared intent unknown. Dashboard distinguishes unanswered introductions from submitted answers.
+- Provider and published crawler-role registry; official IPv4/IPv6 range corroboration with freshness and provenance. Current-range checks are not cryptographic identity or historical ownership proof.
+- Referral-source classification and allowlisted supplied search terms; observed page/click journeys, evidence search/filtering and enriched JSON/CSV exports. Existing visits are enriched on read.
 - Entry funnel, visits, country/state/network breakdowns and offline IP lookup.
 - Vercel deployment with durable Turso storage; local SQLite development.
 - Product website, customer onboarding, dashboard and responsive/accessibility checks.

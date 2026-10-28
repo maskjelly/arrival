@@ -1,3 +1,4 @@
+import { providerRanges } from './provider-ranges.ts';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -155,6 +156,7 @@ function answerErrors(questions: Question[], answers: Visit['answers']) {
 }
 export async function createApp(
   options: {
+    refreshProviderRanges?: boolean;
     databasePath?: string;
     adminPassword?: string;
     trustedProxy?: string | number;
@@ -440,6 +442,7 @@ export async function createApp(
     res.json({ key: await store.rotateKey() }),
   );
   app.get('/api/admin/overview', async (req, res) => {
+    if (options.refreshProviderRanges) await providerRanges.refresh();
     const range = req.query.range === '7d' ? '7d' : req.query.range === 'all' ? 'all' : '24h';
     const since =
       range === 'all'
@@ -501,12 +504,16 @@ export async function createApp(
       .all(since);
     const sourceRows = await store
       .scoped(
-        'SELECT user_agent AS userAgent, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY user_agent',
+        'SELECT user_agent AS userAgent, classification, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY user_agent,classification',
       )
       .all(since);
     const sourceCounts = new Map<string, number>();
+    let automated = 0;
     for (const row of sourceRows) {
-      const name = identify(String(row.userAgent), '').agentName;
+      const client = identify(String(row.userAgent), '');
+      const name = client.agentName;
+      if (client.classification !== 'unknown' || row.classification !== 'unknown')
+        automated += Number(row.count);
       sourceCounts.set(name, (sourceCounts.get(name) ?? 0) + Number(row.count));
     }
     const sources = [...sourceCounts]
@@ -554,7 +561,7 @@ export async function createApp(
         admitted: Number(stat.admitted ?? 0),
         answered: Number(stat.answered ?? 0),
         events: Number(totalEvents.n),
-        automated: Number(stat.automated ?? 0),
+        automated,
         demo: Number(stat.demo ?? 0),
       },
       entry: {
@@ -580,6 +587,7 @@ export async function createApp(
     });
   });
   app.get('/api/admin/sessions/:id', async (req, res) => {
+    if (options.refreshProviderRanges) await providerRanges.refresh();
     const visit = await store.get(String(req.params.id));
     if (!visit) {
       res.status(404).json({ error: 'Visit not found.' });
@@ -597,6 +605,7 @@ export async function createApp(
     res.json({ ok: true });
   });
   app.get('/api/admin/export', async (req, res) => {
+    if (options.refreshProviderRanges) await providerRanges.refresh();
     const sessions = req.query.session
       ? [await store.get(String(req.query.session))].filter((v): v is Visit => !!v)
       : await store.list('1970');
@@ -610,7 +619,7 @@ export async function createApp(
         [
           'Visit ID',
           'Started',
-          'Declared or inferred name',
+          'Declared or header name',
           'Classification',
           'Status',
           'Objective',
@@ -628,6 +637,15 @@ export async function createApp(
           'Network operator',
           'Hosting signal (inferred)',
           'IP data source',
+          'Provider',
+          'Request client',
+          'Identity confidence',
+          'Crawler role',
+          'Referral source',
+          'Supplied search query',
+          'Last observed path',
+          'Range source',
+          'Ranges checked at',
         ],
         ...sessions.map((v) => [
           v.id,
@@ -652,6 +670,15 @@ export async function createApp(
           v.network?.enrichment.source
             ? `${v.network.enrichment.source} https://db-ip.com | CC BY 4.0`
             : '',
+          v.attribution?.provider,
+          v.attribution?.client,
+          v.attribution?.confidence,
+          v.attribution?.role,
+          v.attribution?.referral.source,
+          v.attribution?.referral.searchQuery,
+          v.journey?.lastPath,
+          v.attribution?.rangeCheck?.source,
+          v.attribution?.rangeCheck?.checkedAt,
         ]),
       ];
       res
@@ -662,7 +689,7 @@ export async function createApp(
     }
     res.attachment('arrival-visits.json').json({
       exportedAt: new Date().toISOString(),
-      note: 'Latest 300 visits. Client identities and task answers are unverified unless separately documented. No verification service is connected.',
+      note: 'Latest 300 visits. Provider-range corroboration compares arrival IPs and client headers with current published lists; it is not cryptographic identity or historical ownership proof. Tasks are self-reported. Journeys contain recorded activity only.',
       site: await store.site(),
       networkAttribution: network.status().provider,
       visits: await Promise.all(

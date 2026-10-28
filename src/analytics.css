@@ -911,3 +911,187 @@
     min-height: 26px;
   }
 }
+
+/* Evidence stays separate from declared tasks. */
+.visit-context {
+  padding: 0 0 20px;
+}
+.context-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 22px;
+  margin: 0;
+}
+.context-grid > div {
+  min-width: 0;
+}
+.context-grid dt {
+  color: #746d68;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.context-grid dd {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.context-grid small {
+  display: block;
+  font-size: 11px;
+  color: #68625d;
+  line-height: 1.6;
+}
+.context-grid a,
+.range-evidence a {
+  color: #9a315b;
+  text-underline-offset: 3px;
+  text-decoration: underline;
+}
+.context-grid .context-corroborated {
+  color: #26704c;
+}
+.supplied-query {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.range-evidence {
+  border-top: 1px solid #eee9e5;
+  margin-top: 18px;
+  padding-top: 12px;
+  color: #68625d;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.range-evidence summary {
+  cursor: pointer;
+}
+.observed-journey {
+  margin-bottom: 26px;
+}
+.observed-journey h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.observed-journey > p {
+  color: #6c655f;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.observed-journey ol {
+  padding: 0;
+  list-style: none;
+  margin: 16px 0;
+}
+.observed-journey li {
+  display: flex;
+  gap: 12px;
+  padding: 9px 0;
+}
+.observed-journey li > span {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #f5f1ee;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: #6c655f;
+}
+.observed-journey li > div {
+  min-width: 0;
+}
+.observed-journey code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.observed-journey small {
+  display: block;
+  font-size: 10px;
+  margin-top: 4px;
+  color: #6c655f;
+}
+.context-breakdowns {
+  margin-bottom: 22px;
+}
+.context-breakdowns-heading h2 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+.context-breakdowns-heading p {
+  color: #6c655f;
+  font-size: 11px;
+  margin: 0 0 14px;
+}
+.context-breakdown-panels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.context-breakdown-panels .panel {
+  padding: 18px;
+  min-width: 0;
+}
+.context-breakdown-panels h3 {
+  font-size: 12px;
+  margin: 0 0 16px;
+}
+.context-breakdown-panels ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.context-breakdown-panels li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  padding: 8px 0;
+}
+.context-breakdown-panels li span {
+  overflow-wrap: anywhere;
+}
+.visit-client-context,
+.visit-journey-context {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #6c655f;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.visitor-cell .visit-client-context {
+  max-width: 200px;
+  white-space: normal;
+}
+.visit-context-label {
+  display: block;
+  color: #6c655f;
+  font-size: 10px;
+  margin-top: 3px;
+}
+@media (max-width: 760px) {
+  .context-breakdown-panels {
+    grid-template-columns: 1fr;
+  }
+  .context-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .visit-context {
+    padding: 0 0 20px;
+  }
+}
+
+.visits-toolbar {
+  flex-wrap: wrap;
+}
+.visits-toolbar .search-input {
+  flex-basis: 260px;
+}
+
+.context-grid small {
+  font-weight: 400;
+}

@@ -1,3 +1,5 @@
+import { identify } from './signals.ts';
+import { attributeVisit } from './attribution.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { SQLInputValue } from 'node:sqlite';
 import { Database } from './database.ts';
@@ -10,10 +12,13 @@ export const credential = () => randomBytes(32).toString('base64url');
 const now = () => new Date().toISOString();
 const json = <T>(value: unknown): T => JSON.parse(String(value));
 type Row = Record<string, unknown>;
-const sessionSelect = `SELECT s.*,
+const sessionSelect = `SELECT s.*, (SELECT origin FROM sites WHERE id=s.site_id) AS site_origin,
  (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id) AS event_count,
  (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type='page_view') AS page_count,
  (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type='request') AS request_count,
+ (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type IN ('request','page_view','click')) AS journey_count,
+ (SELECT path FROM events e WHERE e.session_id=s.id AND e.type IN ('request','page_view','click') ORDER BY created_at DESC,rowid DESC LIMIT 1) AS last_path,
+ (SELECT json_group_array(json_object('path',j.path,'type',j.type,'at',j.created_at,'source',j.source)) FROM (SELECT path,type,created_at,source FROM events e WHERE e.session_id=s.id AND e.type IN ('request','page_view','click') ORDER BY created_at,rowid LIMIT 16) j) AS journey_steps,
  (SELECT json_group_array(DISTINCT type) FROM events e WHERE e.session_id=s.id) AS event_types
  FROM sessions s`;
 export const defaultQuestions: Question[] = [
@@ -289,7 +294,7 @@ export class Store {
       String(row.status) !== 'revoked' && Date.parse(String(row.expires_at)) <= Date.now()
         ? 'expired'
         : String(row.status);
-    return {
+    const visit: Visit = {
       id: String(row.id),
       siteId: String(row.site_id),
       createdAt: String(row.created_at),
@@ -318,7 +323,19 @@ export class Store {
       requestCount: Number(row.request_count ?? 0),
       objective: typeof answers.objective === 'string' ? answers.objective : '',
       eventTypes: types,
+      journey: {
+        steps: row.journey_steps ? json(row.journey_steps) : [],
+        total: Number(row.journey_count ?? 0),
+        lastPath: String(row.last_path ?? row.entry_path),
+      },
     };
+    const requestClient = identify(visit.userAgent, visit.ip);
+    if (requestClient.classification !== 'unknown') {
+      if (typeof answers.agent_name !== 'string') visit.agentName = requestClient.agentName;
+      if (visit.classification === 'unknown') visit.classification = requestClient.classification;
+    }
+    visit.attribution = attributeVisit(visit, undefined, String(row.site_origin ?? ''));
+    return visit;
   }
   async get(id: string) {
     await this.ready;

@@ -1,6 +1,6 @@
 # Arrival
 
-Agent introductions and website analytics. An agent follows a normal link to your website, meets a short question step, then continues to its original destination. The customer sees declared intent alongside observed requests, country/state estimates and network ownership.
+Agent introductions and website analytics. An agent follows a normal link to your website, meets a short question step, then continues to its original destination. The customer sees declared intent alongside observed requests, country/state estimates, network ownership, provider evidence, crawler roles, referral sources and observed journeys.
 
 ## Use
 
@@ -36,3 +36,5 @@ npm run check
 React, TypeScript, Vite, Express, SQLite/Turso, Zod, Manrope and native CSS. No model key is required.
 
 [Customer installation](packages/next/README.md) · [Architecture](docs/architecture.md) · [Vercel](docs/vercel.md) · [Network data](docs/network-data.md) · [Build status](docs/build-status.md)
+
+Provider evidence combines client headers with current official IP ranges for OpenAI, Anthropic, Perplexity, Google and Bing. Range checks refresh automatically on dashboard reads; visitor requests never wait for them. A matching range corroborates the network, not the human user or private prompt. Search terms appear only when supplied in a recognized referring search URL.

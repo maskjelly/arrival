@@ -12,6 +12,7 @@ export default defineConfig({
     command: 'npm run build && npm start',
     env: {
       PORT: '3107',
+      PROVIDER_RANGE_REFRESH: 'false',
       DATABASE_PATH: '.data/ui-tests.sqlite',
       ADMIN_PASSWORD: '',
       NODE_ENV: 'production',

@@ -15,6 +15,7 @@ const networkService = new NetworkEnricher({
 });
 await networkService.load();
 const { app, store } = await createApp({
+  refreshProviderRanges: process.env.PROVIDER_RANGE_REFRESH !== 'false',
   databasePath: process.env.DATABASE_PATH,
   databaseConnection: process.env.TURSO_DATABASE_URL
     ? { url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN ?? '' }

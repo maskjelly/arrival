@@ -1,3 +1,4 @@
+import { claimedClients, safeReferrer } from './attribution.ts';
 import type { Evidence, Visit } from '../src/types.ts';
 export function identify(
   userAgent: string,
@@ -18,13 +19,19 @@ export function identify(
       note: 'Connection or integration source; not the end user’s location.',
     },
   ];
+  const known = claimedClients(userAgent);
   const match = userAgent.match(
-    /(Arrival-DemoAgent|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|PerplexityBot|Perplexity-User|Googlebot|bingbot|Amazonbot|Bytespider|CCBot|python-requests|python-httpx|curl|wget|HeadlessChrome|Playwright|Puppeteer|Selenium|Agent\/[^\s;)]+)/i,
+    /(Arrival-DemoAgent|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|Claude-SearchBot|OAI-AdsBot|PerplexityBot|Perplexity-User|Googlebot|bingbot|Amazonbot|Bytespider|CCBot|python-requests|python-httpx|curl|wget|HeadlessChrome|Playwright|Puppeteer|Selenium|Agent\/[^\s;)]+)/i,
   );
   const automation = /HeadlessChrome|Playwright|Puppeteer|Selenium/i.test(userAgent);
   return {
     evidence,
-    agentName: match?.[0] ?? 'Unidentified visitor',
+    agentName:
+      known.length === 1
+        ? known[0].name
+        : known.length > 1
+          ? 'Conflicting client claims'
+          : (match?.[0] ?? 'Unidentified visitor'),
     classification: (automation
       ? 'automation signals'
       : match
@@ -39,14 +46,7 @@ export function cleanPath(input: string) {
     return '/';
   }
 }
-export function cleanReferrer(input: string) {
-  try {
-    const u = new URL(input);
-    return ['http:', 'https:'].includes(u.protocol) ? `${u.origin}${u.pathname}`.slice(0, 500) : '';
-  } catch {
-    return '';
-  }
-}
+export const cleanReferrer = safeReferrer;
 export const htmlEscape = (v: unknown) =>
   String(v)
     .replaceAll('&', '&amp;')

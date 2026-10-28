@@ -13,12 +13,17 @@ export const stack = [
   { name: 'Zod 4', role: 'Server validation for answers, configuration, and telemetry.' },
   {
     name: 'Native CSS + Manrope',
-    role: 'Quiet green surfaces, variable Manrope typography, top navigation and responsive customer views.',
+    role: 'Paper and pink surfaces, Manrope and Excalifont typography, responsive customer views.',
   },
   { name: 'Playwright + node:test', role: 'Browser journeys and API/integration checks.' },
 ];
 
 export const builtFeatures = [
+  {
+    title: 'Provider, role and referral context',
+    detail:
+      'Header claims, published crawler roles, official IPv4/IPv6 range corroboration, supplied referral search terms and recorded page journeys. Existing visits are enriched automatically.',
+  },
   {
     title: 'Questions that belong to your site',
     detail:
@@ -60,7 +65,7 @@ export const nextFeatures = [
   {
     title: 'Verified operator identities',
     detail:
-      'Add signed-agent verification such as Web Bot Auth. Current names and objectives remain unverified.',
+      'Add signed-agent verification such as Web Bot Auth. IP-range corroboration is implemented; cryptographic identity and task verification remain.',
   },
   {
     title: 'Stronger, measured detection',

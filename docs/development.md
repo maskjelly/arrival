@@ -49,7 +49,7 @@ For the demo specifically, requesting `/lab` with `Accept: application/json` ret
 
 Request headers are client-controlled claims. Browser properties and task answers can be invented. The UI deliberately separates **server observed**, **request header**, **browser reported**, **agent reported**, and **integration reported** evidence. No operator identity is cryptographically verified in this version.
 
-Collected browser context includes user-agent, automation flag, language, timezone, platform, viewport/screen, available hardware hints, touch support and cookie capability. Request queries and referrer queries are stripped. Input contents and page text are not captured. A user's voluntarily supplied search query and questionnaire answers are recorded.
+Collected browser context includes user-agent, automation flag, language, timezone, platform, viewport/screen, available hardware hints, touch support and cookie capability. Request queries and arbitrary referrer parameters are stripped. A bounded search term is retained only from recognized search-result referring URLs. Input contents and page text are not captured. A user's voluntarily supplied search query and questionnaire answers are recorded.
 
 The collector can see a proxy or browser host's address rather than the end user's. Location and ASN are looked up locally in optional DB-IP Lite databases; individual visitor IPs are not sent to a lookup API. It does not collect TLS fingerprints, infer private prompts or guarantee detection of computer-use agents. Browser collection requires JavaScript; server reporting is best-effort and can lose events during an outage. See [network data, trust configuration and accuracy](network-data.md).
 

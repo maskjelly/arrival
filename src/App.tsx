@@ -1,3 +1,4 @@
+import { VisitContext, Journey, ContextBreakdowns } from './VisitContext.tsx';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowClockwise,
@@ -784,7 +785,7 @@ function OverviewPage({
           )}
           <div className="panel-footnote">
             <Info size={13} />
-            Names come from headers, not verified identities.
+            Names come from headers. Open a visit for provider-range evidence.
           </div>
         </section>
         <section className="panel overview-places">
@@ -835,6 +836,7 @@ function OverviewPage({
           </div>
         </section>
       </div>
+      <ContextBreakdowns visits={data.sessions} />
       <section className="panel visits-panel">
         <div className="panel-heading">
           <div>
@@ -985,13 +987,27 @@ function VisitTable({
                     <span>
                       <strong>{visit.agentName}</strong>
                       <small>{visit.isDemo ? 'Controlled demo' : sourceName(visit.source)}</small>
+                      {visit.attribution && (
+                        <>
+                          <span className="visit-client-context">
+                            {visit.attribution.provider} · {visit.attribution.role}
+                          </span>
+                          <span className="visit-context-label">
+                            {visit.attribution.confidence}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </button>
                 </td>
                 <td>
                   <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
-                    {visit.objective || 'Intent unknown'}
+                    {visit.objective || 'Task unknown'}
                   </p>
+                  <span className="visit-journey-context">
+                    {visit.attribution?.referral.source} ·{' '}
+                    {visit.journey?.lastPath ?? visit.entryPath}
+                  </span>
                 </td>
                 <td>
                   <NetworkBadge visit={visit} />
@@ -1038,7 +1054,16 @@ function VisitTable({
                 <Status visit={visit} />
               </span>
               <span className={`mobile-visit-objective ${visit.objective ? '' : 'muted'}`}>
-                {visit.objective || 'Intent unknown'}
+                {visit.objective || 'Task unknown'}
+              </span>
+              {visit.attribution && (
+                <span className="visit-client-context">
+                  {visit.attribution.provider} · {visit.attribution.role} ·{' '}
+                  {visit.attribution.confidence}
+                </span>
+              )}
+              <span className="visit-journey-context">
+                {visit.attribution?.referral.source} → {visit.journey?.lastPath ?? visit.entryPath}
               </span>
               <span className="mobile-visit-network">
                 <NetworkBadge visit={visit} />
@@ -1072,21 +1097,23 @@ function VisitsPage({
 }) {
   const [search, setSearch] = useState(''),
     [status, setStatus] = useState('all'),
-    [channel, setChannel] = useState('all');
+    [channel, setChannel] = useState('all'),
+    [identity, setIdentity] = useState('all');
   const visits = useMemo(
     () =>
       data.sessions.filter(
         (v) =>
           (!search ||
-            `${v.agentName} ${v.objective} ${v.id} ${v.entryPath} ${v.ip} ${v.network?.ip ?? ''} ${v.network?.location?.country ?? ''} ${v.network?.location?.countryCode ?? ''} ${v.network?.location?.city ?? ''} ${v.network?.asn?.organization ?? ''} ${v.network?.asn?.number ?? ''}`
+            `${v.attribution?.provider ?? ''} ${v.attribution?.client ?? ''} ${v.attribution?.role ?? ''} ${v.attribution?.confidence ?? ''} ${v.attribution?.referral.source ?? ''} ${v.attribution?.referral.searchQuery ?? ''} ${v.journey?.lastPath ?? ''} ${v.agentName} ${v.objective} ${v.id} ${v.entryPath} ${v.ip} ${v.network?.ip ?? ''} ${v.network?.location?.country ?? ''} ${v.network?.location?.countryCode ?? ''} ${v.network?.location?.city ?? ''} ${v.network?.asn?.organization ?? ''} ${v.network?.asn?.number ?? ''}`
               .toLowerCase()
               .includes(search.toLowerCase())) &&
+          (identity === 'all' || v.attribution?.confidence === identity) &&
           (status === 'all' || v.status === status) &&
           (channel === 'all' || channel === 'demo'
             ? channel === 'all' || v.isDemo
             : v.source === channel),
       ),
-    [data, search, status, channel],
+    [data, search, status, channel, identity],
   );
   return (
     <section className="panel">
@@ -1095,11 +1122,29 @@ function VisitsPage({
           <MagnifyingGlass size={18} />
           <input
             aria-label="Search visits"
-            placeholder="Search an agent, task, IP, city, or network…"
+            placeholder="Search provider, role, referral, task, IP…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <select
+          aria-label="Filter by identity confidence"
+          value={identity}
+          onChange={(e) => setIdentity(e.target.value)}
+        >
+          <option value="all">All identity evidence</option>
+          {[
+            'network corroborated',
+            'header claim only',
+            'network match only',
+            'conflicting claims',
+            'unidentified',
+          ].map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
         <select
           aria-label="Filter by status"
           value={status}
@@ -1152,6 +1197,7 @@ function VisitsPage({
                   setSearch('');
                   setStatus('all');
                   setChannel('all');
+                  setIdentity('all');
                 }}
               >
                 Clear filters
@@ -1778,7 +1824,11 @@ function VisitDrawer({
             </div>
             <div className="identity-note">
               <ShieldWarning size={17} />
-              <span>Identity unverified. Names and objectives can be self-reported.</span>
+              <span>
+                {visit.attribution?.confidence === 'network corroborated'
+                  ? 'Provider network corroborated. Task answers remain self-reported.'
+                  : 'Identity unverified. Names and objectives can be self-reported.'}
+              </span>
             </div>
             <div className="drawer-metrics">
               <div>
@@ -1826,6 +1876,7 @@ function VisitDrawer({
               role="region"
               aria-label="Visit details content"
             >
+              {(tab === 'answers' || tab === 'signals') && <VisitContext visit={visit} />}
               {tab === 'answers' && (
                 <>
                   {visit.objective ? (
@@ -1841,18 +1892,18 @@ function VisitDrawer({
                           {hasAnswers
                             ? 'No objective supplied'
                             : fetchOnly
-                              ? 'Content allowed · intent unknown'
+                              ? 'Content allowed · task unknown'
                               : questionsShown
                                 ? 'Questions shown · no response received'
-                                : 'Intent unknown'}
+                                : 'Task unknown'}
                         </strong>
                         <p>
                           {hasAnswers
                             ? 'Other submitted answers appear below.'
                             : fetchOnly
-                              ? 'Intent unknown. This client was allowed to read without answering. Request and network evidence is available; no task was declared.'
+                              ? 'Task unknown. This client was allowed to read without answering. Request and network evidence is available; no task was declared.'
                               : questionsShown
-                                ? 'No answers were received. We cannot tell whether the client could answer or chose not to. Its intent is unknown.'
+                                ? 'No answers were received. We cannot tell whether the client could answer or chose not to. Its task is unknown.'
                                 : 'No task declaration was received. Request evidence does not reveal the visitor’s purpose.'}
                         </p>
                       </div>
@@ -1910,6 +1961,7 @@ function VisitDrawer({
               {tab === 'network' && <NetworkDetails visit={visit} copy={copy} />}
               {tab === 'activity' && (
                 <div className="timeline">
+                  <Journey visit={visit} />
                   {detail.events.map((event) => (
                     <article key={event.id}>
                       <span className={`event-node ${event.type === 'check_in' ? 'success' : ''}`}>

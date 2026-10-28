@@ -81,6 +81,41 @@ export type NetworkStatus = {
   };
   errors: string[];
 };
+export type VisitAttribution = {
+  provider: string;
+  client: string;
+  role: string;
+  roleBasis: string;
+  roleDocs?: string;
+  confidence:
+    | 'network corroborated'
+    | 'header claim only'
+    | 'network match only'
+    | 'conflicting claims'
+    | 'unidentified';
+  explanation: string;
+  ipSource: string;
+  rangeCheck?: {
+    status: 'matched' | 'no match' | 'stale';
+    source?: string;
+    prefix?: string;
+    checkedAt?: string;
+    note: string;
+  };
+  networkProviders: string[];
+  referral: {
+    kind: 'internal' | 'search' | 'AI referral' | 'website' | 'unavailable';
+    source: string;
+    url?: string;
+    searchQuery?: string;
+    evidence: string;
+  };
+};
+export type ObservedJourney = {
+  steps: { path: string; type: string; at: string; source: string }[];
+  total: number;
+  lastPath: string;
+};
 export type Visit = {
   id: string;
   siteId: string;
@@ -93,6 +128,8 @@ export type Visit = {
   userAgent: string;
   ip: string;
   network?: NetworkContext;
+  attribution?: VisitAttribution;
+  journey?: ObservedJourney;
   referrer: string;
   entryPath: string;
   agentName: string;

@@ -564,9 +564,9 @@ test('unanswered introductions and observed fetch clients have distinct honest a
   await page.goto('/app/fetch-policy?view=sessions');
   await page.locator('.visitor-cell').filter({ hasText: 'Claude-User' }).click();
   const drawer = page.getByRole('dialog', { name: 'Visit details' });
-  await expect(drawer.getByText('Content allowed · intent unknown', { exact: true })).toBeVisible();
+  await expect(drawer.getByText('Content allowed · task unknown', { exact: true })).toBeVisible();
   await expect(
-    drawer.getByText('Intent unknown. This client was allowed to read without answering.', {
+    drawer.getByText('Task unknown. This client was allowed to read without answering.', {
       exact: false,
     }),
   ).toBeVisible();
@@ -678,4 +678,91 @@ test('visit drawers can be dismissed immediately while their entrance is running
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Close visit details' }).click();
   await expect(dialog).toHaveCount(0);
+});
+
+test('provider evidence, supplied referrals and the observed journey stay separate from unknown tasks', async ({
+  page,
+}) => {
+  const { readFileSync } = await import('node:fs');
+  const ranges = JSON.parse(readFileSync('server/data/provider-ranges.json', 'utf8'));
+  const ip = ranges
+    .find((feed: { id: string }) => feed.id === 'anthropic')
+    .prefixes[0].split('/')[0];
+  const registration = await page.request.post('/api/auth/register', {
+    data: {
+      name: 'Attribution customer',
+      origin: 'https://attribution.test',
+      slug: 'attribution-evidence',
+      password: 'attribution-test-password',
+    },
+  });
+  expect(registration.status()).toBe(201);
+  const client = await registration.json();
+  const ingest = async (path: string) => {
+    const response = await page.request.post('/api/ingest', {
+      headers: { Authorization: `Bearer ${client.key}` },
+      data: {
+        eventId: crypto.randomUUID(),
+        sessionId: 'attribution-journey',
+        method: 'GET',
+        path,
+        userAgent: 'Claude-SearchBot/1.0',
+        ip,
+        referrer: 'https://www.google.com/search?q=website+agent+analytics&token=discard-me',
+        entryDisposition: 'fetch_only',
+      },
+    });
+    expect(response.ok()).toBe(true);
+    return (await response.json()).sessionId;
+  };
+  const id = await ingest('/docs');
+  await ingest('/pricing');
+  await page.goto('/app/attribution-evidence');
+  await expect(page.getByRole('region', { name: 'Visitor context breakdowns' })).toContainText(
+    'Anthropic',
+  );
+  await page.goto('/app/attribution-evidence?view=sessions');
+  await page.getByLabel('Search visits').fill('Search indexing');
+  await page.getByLabel('Filter by identity confidence').selectOption('network corroborated');
+  await expect(page.locator('.visitor-cell')).toHaveCount(1);
+  await expect(page.locator('.visit-table')).toContainText('Task unknown');
+  await expect(page.locator('.visit-table')).toContainText('/pricing');
+  await page.locator('.visitor-cell').click();
+  const drawer = page.getByRole('dialog', { name: 'Visit details' });
+  const context = drawer.getByRole('region', { name: 'Visitor context', exact: true });
+  await expect(context).toContainText('Anthropic');
+  await expect(context).toContainText('Search indexing');
+  await expect(context).toContainText('network corroborated');
+  await expect(context).toContainText('website agent analytics');
+  await expect(context).not.toContainText('discard-me');
+  await context.getByText('IP-range evidence · matched').click();
+  await expect(context.getByRole('link', { name: 'Official range feed' })).toHaveAttribute(
+    'href',
+    'https://claude.com/crawling/bots.json',
+  );
+  await settleMotion(page);
+  const desktopA11y = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(summarize(desktopA11y.violations)).toEqual([]);
+  await drawer.getByRole('button', { name: 'Activity', exact: false }).click();
+  const journey = drawer.getByRole('region', { name: 'Observed journey' });
+  await expect(journey.locator('li')).toHaveCount(2);
+  await expect(journey.locator('li').nth(0)).toContainText('/docs');
+  await expect(journey.locator('li').nth(1)).toContainText('/pricing');
+  const exported = await (await page.request.get(`/api/admin/export?session=${id}`)).json();
+  expect(exported.visits[0].attribution.referral.searchQuery).toBe('website agent analytics');
+  expect(exported.visits[0].objective).toBe('');
+  const csv = await (await page.request.get(`/api/admin/export?session=${id}&format=csv`)).text();
+  expect(csv).toContain('Identity confidence');
+  expect(csv).toContain('network corroborated');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await drawer.getByRole('button', { name: 'Task & answers' }).click();
+  await settleMotion(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await drawer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const mobileA11y = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(summarize(mobileA11y.violations)).toEqual([]);
 });

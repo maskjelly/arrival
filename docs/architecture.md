@@ -40,6 +40,10 @@ sequenceDiagram
 
 The integration recognizes common agent user agents; known search indexers pass through with logging. A browser reporting `navigator.webdriver` can request the same introduction. Neither signal verifies identity, and clients impersonating ordinary browsers can evade this coverage. The browser must execute the SDK script for its automation signal to be seen.
 
+Known fetch clients (`Claude-User`, `ChatGPT-User`, `Perplexity-User`) receive content without a required introduction. The host reports `entryDisposition: fetch_only`; the collector records `entry_observed` with intent unknown. This does not count as questions presented, answered or post-answer continuation. Header patterns select this policy; they do not verify capabilities or identity. The browser automation handoff can still request the interactive flow.
+
+Claude chat is a page retriever, not an HTML form browser. Its documented fetch restrictions include previously-seen URLs and a 250-character URL limit. A generic encoded-answer URL is not a compatible guarantee: [Anthropic fetch tool documentation](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool). This policy favors successful reading over mandatory intent collection; it never manufactures answers from request data.
+
 For matched agents, the middleware returns the question document rather than the requested body. It does not depend on an agent following robots.txt, noticing a footer or being told about Arrival by the human. Clients can submit a normal form or an encoded URL. GET answers trade tool compatibility for query visibility in host logs; only a brief voluntary summary belongs there.
 
 AES-GCM protects the state and clearance from modification. Tokens bind purpose, workspace, origin and expiry. The state preserves the original path/query without storing that query as analytics. The continuation pass lasts one hour. A separate readable cookie only suppresses duplicate browser prompts; it is not the clearance credential. Existing answers are not overwritten by retries. Question snapshots remain tied to each visit.

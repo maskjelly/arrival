@@ -497,3 +497,55 @@ test('a customer creates a workspace and signs back into its own dashboard', asy
   await page.getByRole('button', { name: 'Open workspace' }).click();
   await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
 });
+
+test('unanswered introductions and observed fetch clients have distinct honest answer states', async ({
+  page,
+}) => {
+  const registration = await page.request.post('/api/auth/register', {
+    data: {
+      name: 'Fetch policy test',
+      origin: 'https://fetch-policy.test',
+      slug: 'fetch-policy',
+      password: 'fetch-policy-long-password',
+    },
+  });
+  const client = await registration.json();
+  expect(registration.status()).toBe(201);
+  await page.request.post('/api/ingest', {
+    headers: { Authorization: `Bearer ${client.key}` },
+    data: {
+      eventId: crypto.randomUUID(),
+      sessionId: 'fetch-policy-observed-session',
+      method: 'GET',
+      path: '/plain-corners',
+      userAgent: 'Claude-User/1.0',
+      entryDisposition: 'fetch_only',
+    },
+  });
+  await page.request.post('/api/entry/start', {
+    headers: { Authorization: `Bearer ${client.key}` },
+    data: {
+      sessionId: 'fetch-policy-pending-session',
+      path: '/resume',
+      userAgent: 'HeadlessChrome/1.0',
+    },
+  });
+  await page.goto('/app/fetch-policy?view=sessions');
+  await page.locator('.visitor-cell').filter({ hasText: 'Claude-User' }).click();
+  const drawer = page.getByRole('dialog', { name: 'Visit details' });
+  await expect(
+    drawer.getByText('Fetch-only client · content allowed', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByText('Intent unknown. This client was allowed to read without answering.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(drawer.getByText('Self-reported', { exact: true })).toHaveCount(0);
+  await drawer.getByRole('button', { name: 'Close visit details' }).click();
+  await page.locator('.visitor-cell').filter({ hasText: 'HeadlessChrome' }).click();
+  await expect(
+    drawer.getByText('Questions shown · no response received', { exact: true }),
+  ).toBeVisible();
+  await expect(drawer.getByText('No response received', { exact: true })).toHaveCount(6);
+});

@@ -13,7 +13,7 @@ Create a customer workspace at `/start`. Install the versioned Next.js package a
 - Isolated customer workspaces, password sign-in, scoped ingestion keys, JSON/CSV exports.
 - Local SQLite or durable Turso storage on Vercel. IP lookup uses local DB-IP Lite datasets.
 
-A browser snippet alone can observe visits and offer a prompt on HTML, Wix or Shopify sites; it cannot enforce HTTP questions. The Next.js server integration is the full MVP installation. Search indexers continue without questions, and collector outages fail open. Answers are self-reported; IPs may describe a proxy. This is not universal bot detection or a security firewall, and zero churn is not guaranteed.
+A browser snippet alone can observe visits and offer a prompt on HTML, Wix or Shopify sites; it cannot enforce HTTP questions. The Next.js server integration is the full MVP installation. Known fetch-only clients (Claude chat, ChatGPT and Perplexity fetchers) and search indexers continue without questions; their intent remains unknown unless declared, and collector outages fail open. Answers are self-reported; IPs may describe a proxy. This is not universal bot detection or a security firewall, and zero churn is not guaranteed.
 
 ## Develop
 

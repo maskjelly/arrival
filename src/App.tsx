@@ -89,6 +89,7 @@ const eventName = (value: string) =>
     gate_presented: 'Check-in requested',
     check_in: 'Purpose declared',
     purpose_declared: 'Purpose shared voluntarily',
+    entry_observed: 'Fetch-only client allowed without questions',
     check_in_failed: 'Check-in incomplete',
     page_view: 'Page viewed',
     browser_context: 'Browser context collected',
@@ -1070,7 +1071,7 @@ function VisitTable({
                 </td>
                 <td>
                   <p className={`objective ${visit.objective ? '' : 'not-provided'}`}>
-                    {visit.objective || 'No purpose declared'}
+                    {visit.objective || 'Intent unknown'}
                   </p>
                 </td>
                 <td>
@@ -1117,7 +1118,7 @@ function VisitTable({
                 <Status visit={visit} />
               </span>
               <span className={`mobile-visit-objective ${visit.objective ? '' : 'muted'}`}>
-                {visit.objective || 'No purpose declared'}
+                {visit.objective || 'Intent unknown'}
               </span>
               <span className="mobile-visit-network">
                 <NetworkBadge visit={visit} />
@@ -1308,7 +1309,8 @@ function QuestionsPage({
           <h2>At your website’s door</h2>
           <p>
             Ask recognized interactive agents once, then return them to their original destination.
-            Search indexers continue with request logging.
+            Known fetch-only clients (including Claude chat), search indexers and unknown visitors
+            continue with request logging; their intent stays unknown unless they share it.
           </p>
         </div>
         <label>
@@ -1771,6 +1773,11 @@ function VisitDrawer({
     };
   }, [load]);
   const visit = detail?.visit;
+  const hasAnswers = !!visit && Object.keys(visit.answers).length > 0;
+  const fetchOnly = detail?.events.some(
+    (event) => event.type === 'entry_observed' && event.data.reason === 'fetch_only',
+  );
+  const questionsShown = detail?.events.some((event) => event.type === 'entry_presented');
   return (
     <dialog
       className="visit-drawer"
@@ -1872,7 +1879,26 @@ function VisitDrawer({
                   ) : (
                     <div className="inline-note">
                       <Info size={18} />
-                      <p>This visitor has not declared an objective.</p>
+                      <div>
+                        <strong>
+                          {hasAnswers
+                            ? 'No objective supplied'
+                            : fetchOnly
+                              ? 'Fetch-only client · content allowed'
+                              : questionsShown
+                                ? 'Questions shown · no response received'
+                                : 'Intent unknown'}
+                        </strong>
+                        <p>
+                          {hasAnswers
+                            ? 'Other submitted answers appear below.'
+                            : fetchOnly
+                              ? 'Intent unknown. This client was allowed to read without answering. Request and network evidence is available; no task was declared.'
+                              : questionsShown
+                                ? 'No answers were received. We cannot tell whether the client could answer or chose not to. Its intent is unknown.'
+                                : 'No task declaration was received. Request evidence does not reveal the visitor’s purpose.'}
+                        </p>
+                      </div>
                     </div>
                   )}
                   <div className="answer-list">
@@ -1880,7 +1906,9 @@ function VisitDrawer({
                       <div key={q.id}>
                         <label>
                           {q.label}
-                          <span>Self-reported</span>
+                          <span>
+                            {visit.answers[q.id]?.length ? 'Self-reported' : 'No answer received'}
+                          </span>
                         </label>
                         <p
                           className={
@@ -1891,8 +1919,10 @@ function VisitDrawer({
                           }
                         >
                           {Array.isArray(visit.answers[q.id])
-                            ? (visit.answers[q.id] as string[]).join(', ') || 'Not provided'
-                            : visit.answers[q.id] || 'Not provided'}
+                            ? (visit.answers[q.id] as string[]).join(', ') ||
+                              (hasAnswers ? 'Not answered' : 'No response received')
+                            : visit.answers[q.id] ||
+                              (hasAnswers ? 'Not answered' : 'No response received')}
                         </p>
                       </div>
                     ))}

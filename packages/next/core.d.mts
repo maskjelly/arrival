@@ -1,3 +1,4 @@
+export function isReadOnlyFetch(userAgent: string): boolean;
 export function classify(userAgent: string): 'agent' | 'indexer' | 'unknown';
 export function seal(value: Record<string, unknown>, secret: string): Promise<string>;
 export function unseal(

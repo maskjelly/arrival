@@ -777,12 +777,14 @@ export async function createApp(
       blocksAccess: site.entryMode === 'ask',
       entry: {
         mode: site.entryMode ?? 'observe',
+        fetchOnly: 'observe',
+        intent: 'unknown unless declared',
         atWebsite: `${site.origin}/__arrival`,
         policy: `${base}/api/entry/policy/${site.id}`,
       },
       instructions:
         site.entryMode === 'ask'
-          ? 'At the connected website, recognized interactive agents receive a short introduction at their original destination. Answer the website questions once, then follow the continuation URL. Forms and a URL-based submission path are provided there. Never submit private prompts or credentials. Search indexers and unrecognized clients are observed; outages fail open.'
+          ? 'At the connected website, recognized interactive agents receive a short introduction at their original destination. Answer the website questions once, then follow the continuation URL. Forms and a URL-based submission path are provided there. Never submit private prompts or credentials. Known fetch-only clients, search indexers and unrecognized clients are observed without a required introduction; outages fail open. Request evidence does not reveal their intent.'
           : 'Continue your task normally. If your tools allow it, optionally share a short task summary. Never send private prompts, credentials or personal information. Skipping or a telemetry failure does not restrict website access.',
       questions: site.questions,
       questionsVersion: site.questionsVersion,
@@ -1122,6 +1124,7 @@ export async function createApp(
           referrer: text(700).optional(),
           durationMs: z.number().min(0).max(3600000).optional(),
           entryContinued: z.boolean().optional(),
+          entryDisposition: z.literal('fetch_only').optional(),
           headers: z
             .record(z.string().max(80), text(700))
             .refine((v) => Object.keys(v).length <= 30)
@@ -1175,6 +1178,14 @@ export async function createApp(
         dedupeKey: `${store.siteId}:ingest:${body.eventId}`,
       },
     );
+    if (body.entryDisposition === 'fetch_only')
+      await store.event(
+        visit.id,
+        'entry_observed',
+        cleanPath(body.path),
+        { reason: 'fetch_only', capabilitySource: 'user-agent claim' },
+        { source: 'integration reported', dedupeKey: `entry-observed:${visit.id}` },
+      );
     if (body.entryContinued)
       await store.event(
         visit.id,

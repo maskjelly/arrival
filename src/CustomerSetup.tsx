@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Site } from './types.ts';
 export const sdkUrl =
-  'https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.1/arrival-next-0.2.1.tgz';
+  'https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.2/arrival-next-0.2.2.tgz';
 export const middlewareCode = `export { middleware } from '@arrival/next';
 export const config = {
   matcher: ['/((?!_next|api|favicon.ico|robots.txt|sitemap.xml|.*\\\\.(?:css|js|png|jpg|jpeg|gif|svg|woff2?)$).*)'],
@@ -100,8 +100,10 @@ export function CustomerSetup({
         <strong>Deploy once. Manage questions here.</strong>
         <p>
           Recognized interactive agents meet your questions at the page they requested. A valid
-          introduction resumes their destination. Human-looking clients and search indexers are
-          observed; no detection method identifies every bot.
+          introduction resumes their destination. Known fetch-only clients (Claude chat, ChatGPT and
+          Perplexity fetchers), human-looking clients and search indexers are observed without
+          required answers. Their intent remains unknown unless declared. No detection method
+          identifies every bot.
         </p>
         <p>
           Browser-only installs on Wix and Shopify collect signals and show a prompt. They cannot

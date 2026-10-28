@@ -87,9 +87,43 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     const pending: Promise<any>[] = [];
     const secret = av.key;
     const cfg = { endpoint: base, siteId: av.site.id, key: secret, clientIp: '8.8.8.8' };
+    for (const ua of [
+      'Mozilla/5.0 (compatible; Claude-User/1.0; +claude-user@anthropic.com)',
+      'ChatGPT-User/1.0',
+      'Perplexity-User/1.0',
+    ]) {
+      let cookie = '';
+      for (const path of ['/resume', '/plain-corners']) {
+        const observed = await handleArrival(
+          new Request('https://a.test' + path, { headers: { 'user-agent': ua, Cookie: cookie } }),
+          cfg,
+          { waitUntil: (p: Promise<any>) => pending.push(p) },
+        );
+        assert.equal(
+          observed.response,
+          undefined,
+          'Fetch-only clients must receive website control without answering',
+        );
+        cookie = observed.cookies![0].split(';')[0];
+      }
+    }
+    await Promise.all(pending);
+    const fetchVisits = (await read('/api/admin/overview', ac)).data.sessions.filter((v: any) =>
+      v.eventTypes.includes('entry_observed'),
+    );
+    assert.equal(fetchVisits.length, 3);
+    assert.ok(
+      fetchVisits.every((v: any) => !v.objective && !v.eventTypes.includes('entry_presented')),
+    );
+    for (const visit of fetchVisits) {
+      const detail = (await read('/api/admin/sessions/' + visit.id, ac)).data;
+      assert.equal(detail.events.filter((e: any) => e.type === 'request').length, 2);
+      assert.deepEqual(detail.visit.answers, {});
+    }
+    pending.length = 0;
     const first = await handleArrival(
       new Request('https://a.test/only-a?original=kept', {
-        headers: { 'user-agent': 'ChatGPT-User/1.0' },
+        headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' },
       }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },
@@ -126,7 +160,7 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.ok(next.startsWith('https://a.test/only-a?original=kept'));
     assert.ok(next.includes('__arrival_pass='));
     const continued = await handleArrival(
-      new Request(next, { headers: { 'user-agent': 'ChatGPT-User/1.0' } }),
+      new Request(next, { headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' } }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },
     );
@@ -185,7 +219,7 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.equal(tokenAsAnswer.status, 401);
     const bad = await handleArrival(
       new Request('https://a.test/only-a?__arrival_pass=forged', {
-        headers: { 'user-agent': 'ChatGPT-User/1.0' },
+        headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' },
       }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },
@@ -199,7 +233,7 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.equal(getOnly.response?.status, 303);
     const browser = await handleArrival(
       new Request('https://a.test/only-a?__arrival_browser=1', {
-        headers: { 'user-agent': 'Mozilla/5.0' },
+        headers: { 'user-agent': 'Claude-User/1.0' },
       }),
       cfg,
     );

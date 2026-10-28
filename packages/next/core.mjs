@@ -59,8 +59,17 @@ export async function unseal(token, secret, purpose, siteId, origin) {
     return;
   }
 }
+// A header claim selects a low-friction policy; it does not verify the operator or tool capabilities.
+export function isReadOnlyFetch(userAgent) {
+  return /(?:^|[\s(;])(?:Claude-User|ChatGPT-User|Perplexity-User)(?:[/;\s)]|$)/i.test(userAgent);
+}
 export function classify(userAgent) {
-  if (/Googlebot|bingbot|Applebot|DuckDuckBot|OAI-SearchBot/i.test(userAgent)) return 'indexer';
+  if (
+    /Googlebot|bingbot|Applebot|DuckDuckBot|OAI-SearchBot|Claude-SearchBot|PerplexityBot/i.test(
+      userAgent,
+    )
+  )
+    return 'indexer';
   if (
     /ChatGPT|Perplexity|Claude|anthropic|bot|agent|crawler|spider|curl|python|headless|playwright|puppeteer|wget|httpx|undici|node-fetch|^node$|Go-http-client/i.test(
       userAgent,
@@ -316,7 +325,8 @@ export async function handleArrival(request, configuration, event) {
       request.headers.get('purpose') !== 'prefetch';
     const browserAutomation = url.searchParams.get('__arrival_browser') === '1';
     const kind = browserAutomation ? 'agent' : classify(ua);
-    if (documentRequest && request.method === 'GET' && kind === 'agent' && !pass) {
+    const fetchOnly = !browserAutomation && isReadOnlyFetch(ua);
+    if (documentRequest && request.method === 'GET' && kind === 'agent' && !pass && !fetchOnly) {
       const started = await api(options, '/api/entry/start', {
         sessionId,
         path: url.pathname,
@@ -359,6 +369,7 @@ export async function handleArrival(request, configuration, event) {
           path: url.pathname,
           ...metadata,
           entryContinued: !!pass,
+          ...(fetchOnly ? { entryDisposition: 'fetch_only' } : {}),
           scheme: url.protocol === 'https:' ? 'https' : 'http',
         }),
       );

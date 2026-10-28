@@ -251,9 +251,10 @@ export default function Landing() {
               healthy.
             </p>
             <p>
-              Agent detection is imperfect. Browser impersonation can evade it. Search indexers
-              continue without questions, and collector outages don’t take your website down.
-              Arrival measures the response; it cannot promise zero churn.
+              Agent detection is imperfect. Browser impersonation can evade it. Known fetch-only
+              tools (such as Claude chat) and search indexers read without questions; their intent
+              stays unknown. Collector outages don’t take your website down. Arrival measures the
+              response; it cannot promise zero churn.
             </p>
             <p>
               Answers are declarations. IPs may locate a proxy or remote browser. This MVP does not

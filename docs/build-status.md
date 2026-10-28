@@ -7,6 +7,7 @@
 - Customer workspace creation/sign-in, site-scoped ingestion keys, scoped records/reports/exports.
 - Reusable Next.js package and one standard setup flow; browser-only HTML/Wix/Shopify snippets remain available.
 - Question editing and per-visit snapshots; declared objectives separated from observed/integration-reported behavior.
+- Known fetch-only client policy: allow content, retain request/network analytics, mark undeclared intent unknown. Dashboard distinguishes unanswered introductions from submitted answers.
 - Entry funnel, visits, country/state/network breakdowns and offline IP lookup.
 - Vercel deployment with durable Turso storage; local SQLite development.
 - Product website, customer onboarding, dashboard and responsive/accessibility checks.
@@ -19,4 +20,4 @@
 - Native Wix/Shopify apps, complete CDN connectors or API-handler gating from a browser snippet.
 - Distributed rate limits, durable ingestion queues, complete pagination/exports and recovery automation.
 
-Availability wins during collector outages. Search indexers continue without questions. The question layer enforces the healthy matched-agent path; it is not access authorization for private website content.
+Availability wins during collector outages. Known fetch-only clients and search indexers continue without questions. The question layer enforces the healthy matched-agent path; it is not access authorization for private website content.

@@ -47,3 +47,7 @@ Ask the agent to open the live website directly, read two projects and the résu
 For intent answers, let it follow the automatic introduction at the page it requested. The integration also exposes `https://whiteye.in/.well-known/arrival.json` for discovery and provides a GET answer path for read-only HTTP tools. Read-only tools can use the GET answer path; willingness to answer depends on the agent. Never request private task context. The standard Next.js SDK links browser activity to its host session. Tools that retain neither cookies nor the continuation parameter may create separate visits on later requests.
 
 Source references: [Vercel filesystem limits](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel), [request-header trust](https://vercel.com/docs/headers/request-headers), [Turso on Vercel](https://vercel.com/marketplace/tursocloud/database), and [Next.js middleware background work](https://nextjs.org/docs/15/app/api-reference/file-conventions/middleware).
+
+## Fetch-only compatibility
+
+With Next.js SDK 0.2.2, known Claude/ChatGPT/Perplexity fetch user agents receive the actual page, without an introduction. A request is recorded with intent unknown. Browser automation still uses the introduction. To retest Claude chat, use a fresh conversation and a fresh URL query to reduce reuse of its earlier fetched form; Arrival cannot purge a provider cache. SDK/HTTP tests establish response behavior, not willingness or capabilities of every chatbot product.

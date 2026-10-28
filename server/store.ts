@@ -118,6 +118,8 @@ export class Store {
       CREATE INDEX IF NOT EXISTS sessions_created ON sessions(created_at);
       CREATE TABLE IF NOT EXISTS admin_sessions (token_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL, site_id TEXT NOT NULL DEFAULT 'site_local');
       CREATE TABLE IF NOT EXISTS workspaces (site_id TEXT PRIMARY KEY REFERENCES sites(id), slug TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS entry_challenges (token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), site_id TEXT NOT NULL REFERENCES sites(id), expires_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS entry_challenges_expiry ON entry_challenges(expires_at);
       CREATE TABLE IF NOT EXISTS entry_policies (site_id TEXT PRIMARY KEY REFERENCES sites(id), mode TEXT NOT NULL DEFAULT 'ask', message TEXT NOT NULL DEFAULT 'A quick introduction, then back to your task.');
     `);
     if (
@@ -362,10 +364,44 @@ export class Store {
   }
   async entryChallenge(id: string) {
     const token = credential();
+    await this.db.prepare('DELETE FROM entry_challenges WHERE expires_at<?').run(now());
     await this.db
-      .prepare('UPDATE sessions SET token_hash=? WHERE id=? AND site_id=?')
-      .run(hash(token), id, this.siteId);
+      .prepare(
+        'INSERT INTO entry_challenges(token_hash,session_id,site_id,expires_at) SELECT ?,?,?,? WHERE EXISTS(SELECT id FROM sessions WHERE id=? AND site_id=?)',
+      )
+      .run(
+        hash(token),
+        id,
+        this.siteId,
+        new Date(Date.now() + 15 * 60000).toISOString(),
+        id,
+        this.siteId,
+      );
     return token;
+  }
+  async entryByChallenge(token: string) {
+    const row = await this.db
+      .prepare(
+        'SELECT session_id FROM entry_challenges WHERE token_hash=? AND site_id=? AND expires_at>?',
+      )
+      .get(hash(token), this.siteId, now());
+    return row ? this.get(String(row.session_id)) : undefined;
+  }
+  async declareOnce(id: string, answers: Visit['answers']) {
+    const updated = await this.db
+      .prepare(
+        "UPDATE sessions SET answers=?,status='observed',permissions='[]' WHERE id=? AND site_id=? AND answers='{}'",
+      )
+      .run(JSON.stringify(answers), id, this.siteId);
+    if (updated.changes)
+      await this.event(
+        id,
+        'purpose_declared',
+        (await this.get(id))!.entryPath,
+        { enforced: true },
+        { method: 'POST', source: 'agent reported' },
+      );
+    return !!updated.changes;
   }
   async byToken(token: string) {
     await this.ready;

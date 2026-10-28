@@ -157,6 +157,44 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
       cfg,
     );
     assert.ok((await browser.response!.text()).includes('Agent introduction'));
+    const concurrent = await Promise.all(
+      [1, 2].map(() =>
+        post(
+          '/api/entry/start',
+          { sessionId: 'parallel-page-session', path: '/only-a', userAgent: 'ChatGPT-User' },
+          { Authorization: `Bearer ${av.key}` },
+        ),
+      ),
+    );
+    const starts = await Promise.all(concurrent.map((r) => r.json()));
+    assert.ok(starts.every((d) => d.challenge?.length > 20));
+    assert.notEqual(starts[0].challenge, starts[1].challenge);
+    const responses = await Promise.all(
+      starts.map((d, index) =>
+        post(
+          '/api/entry/answer',
+          {
+            challenge: d.challenge,
+            answers: {
+              agent_name: 'Parallel visitor',
+              objective: 'First accepted task ' + index,
+              task_type: 'Research',
+              actions: ['Read pages'],
+            },
+          },
+          { Authorization: `Bearer ${av.key}` },
+        ),
+      ),
+    );
+    assert.deepEqual(
+      responses.map((r) => r.status),
+      [200, 200],
+    );
+    const after = await read('/api/admin/overview', ac);
+    assert.equal(
+      after.data.sessions.filter((v: any) => v.agentName === 'Parallel visitor').length,
+      1,
+    );
     assert.equal(classify('Googlebot'), 'indexer');
     assert.equal(classify('Mozilla/5.0'), 'unknown');
   } finally {

@@ -62,9 +62,9 @@ export function installEntry(
         ...identify(b.userAgent, b.ip ?? '', 'integration reported'),
       });
       visit = created.visit;
-      challenge = created.token;
+      challenge = await store.entryChallenge(visit.id);
     } else {
-      // Rotate a visit-only challenge. It grants no owner privileges or website authorization.
+      // Independent visit-only challenges let concurrent page requests complete without invalidating one another.
       challenge = await store.entryChallenge(visit.id);
     }
     if (b.browserAutomation)
@@ -105,7 +105,9 @@ export function installEntry(
       res.status(422).json({ error: 'Please provide a short task summary.' });
       return;
     }
-    const visit = await store.byToken(parsed.data.challenge);
+    const visit =
+      (await store.entryByChallenge(parsed.data.challenge)) ??
+      (await store.byToken(parsed.data.challenge));
     if (!visit || visit.source !== 'server' || ['expired', 'revoked'].includes(visit.status)) {
       res.status(401).json({ error: 'This introduction expired. Open the original page again.' });
       return;
@@ -124,7 +126,11 @@ export function installEntry(
       res.json({ ok: true, visitId: visit.id });
       return;
     }
-    await store.declare(visit.id, parsed.data.answers, 'agent reported');
+    const inserted = await store.declareOnce(visit.id, parsed.data.answers);
+    if (!inserted) {
+      res.json({ ok: true, visitId: visit.id });
+      return;
+    }
     await store.event(
       visit.id,
       'entry_answered',

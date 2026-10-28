@@ -267,7 +267,7 @@ export class Store {
         new Date(Date.now() + 86400000).toISOString(),
         input.source === 'gateway' && site.requireAdmission ? 'awaiting' : 'observed',
         input.source,
-        Number(!!input.isDemo),
+        Number(!!input.isDemo || /^Arrival-DemoAgent\//i.test(input.userAgent)),
         input.userAgent,
         input.ip,
         input.referrer,
@@ -302,7 +302,7 @@ export class Store {
       expiresAt: String(row.expires_at),
       status: status as Visit['status'],
       source: String(row.source) as Visit['source'],
-      isDemo: !!row.is_demo,
+      isDemo: !!row.is_demo || /^Arrival-DemoAgent\//i.test(String(row.user_agent)),
       userAgent: String(row.user_agent),
       ip: String(row.ip),
       network:

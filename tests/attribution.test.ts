@@ -193,3 +193,32 @@ test('existing stored visits gain attribution and ordered journeys without rewri
     store.close();
   }
 });
+
+test('server demo reports are consistently marked and cannot receive provider corroboration', async () => {
+  const store = new Store(':memory:');
+  try {
+    const created = await store.createSession({
+      source: 'server',
+      userAgent: 'Arrival-DemoAgent/1.0',
+      ip: '',
+      referrer: '',
+      entryPath: '/',
+      agentName: 'Demo',
+      classification: 'unknown',
+      evidence: [],
+    });
+    assert.equal(identify('AhrefsBot/7.0', '').classification, 'self-identifying bot');
+    assert.equal(created.visit.isDemo, true);
+    assert.equal((await store.list('1970'))[0].isDemo, true);
+    assert.match(created.visit.attribution!.explanation, /Controlled demo/);
+    assert.equal(
+      attributeVisit(
+        visit({ userAgent: 'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)' }),
+        new ProviderRanges([]),
+      ).provider,
+      'Ahrefs',
+    );
+  } finally {
+    store.close();
+  }
+});

@@ -451,7 +451,7 @@ export async function createApp(
     const sessions = await store.list(since);
     const stat = (await store
       .scoped(
-        `SELECT COUNT(*) AS visits, SUM(CASE WHEN status='admitted' AND expires_at>? THEN 1 ELSE 0 END) AS admitted, SUM(CASE WHEN answers!='{}' THEN 1 ELSE 0 END) AS answered, SUM(CASE WHEN classification!='unknown' THEN 1 ELSE 0 END) AS automated, SUM(is_demo) AS demo FROM sessions WHERE created_at>=?`,
+        `SELECT COUNT(*) AS visits, SUM(CASE WHEN status='admitted' AND expires_at>? THEN 1 ELSE 0 END) AS admitted, SUM(CASE WHEN answers!='{}' THEN 1 ELSE 0 END) AS answered, SUM(CASE WHEN classification!='unknown' THEN 1 ELSE 0 END) AS automated, SUM(CASE WHEN is_demo=1 OR lower(user_agent) LIKE 'arrival-demoagent/%' THEN 1 ELSE 0 END) AS demo FROM sessions WHERE created_at>=?`,
       )
       .get(new Date().toISOString(), since))!;
     const totalEvents = (await store

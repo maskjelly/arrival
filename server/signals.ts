@@ -34,7 +34,7 @@ export function identify(
           : (match?.[0] ?? 'Unidentified visitor'),
     classification: (automation
       ? 'automation signals'
-      : match
+      : known.length || match
         ? 'self-identifying bot'
         : 'unknown') as Visit['classification'],
   };

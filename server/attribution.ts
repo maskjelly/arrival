@@ -92,6 +92,18 @@ export const clients: Client[] = [
   },
   { name: 'Bytespider', provider: 'ByteDance', role: 'Web crawling' },
   { name: 'CCBot', provider: 'Common Crawl', role: 'Web crawling' },
+  {
+    name: 'AhrefsBot',
+    provider: 'Ahrefs',
+    role: 'SEO analysis',
+    docs: 'https://ahrefs.com/robot/',
+  },
+  {
+    name: 'AhrefsSiteAudit',
+    provider: 'Ahrefs',
+    role: 'SEO site audit',
+    docs: 'https://ahrefs.com/robot/',
+  },
 ];
 export function claimedClients(userAgent: string) {
   return clients.filter((client) =>

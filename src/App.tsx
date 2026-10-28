@@ -8,6 +8,7 @@ import {
   ArrowSquareOut,
   ArrowUp,
   CalendarBlank,
+  CaretDown,
   ChartLineUp,
   Check,
   CheckCircle,
@@ -179,95 +180,21 @@ function Empty({
 }
 function RangePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <div className="range-picker" role="group" aria-label="Date range">
+    <label className="range-picker">
       <CalendarBlank size={15} aria-hidden="true" />
-      {[
-        ['24h', '24h'],
-        ['7d', '7d'],
-        ['all', 'All time'],
-      ].map(([id, label]) => (
-        <button key={id} aria-pressed={value === id} onClick={() => onChange(id)} type="button">
-          {label}
-        </button>
-      ))}
-    </div>
+      <select
+        aria-label="Date range"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="24h">Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="all">All time</option>
+      </select>
+      <CaretDown size={13} aria-hidden="true" />
+    </label>
   );
 }
-function MiniBars({ values, tone = 'accent' }: { values: number[]; tone?: 'accent' | 'ink' }) {
-  const max = Math.max(1, ...values);
-  const shown = values.slice(-14);
-  return (
-    <span className={`mini-bars ${tone}`} aria-hidden="true">
-      {shown.map((value, index) => (
-        <span
-          key={index}
-          style={{ height: `${Math.max(3, (value / max) * 26)}px` }}
-          className={index === shown.length - 1 ? 'latest' : ''}
-        />
-      ))}
-    </span>
-  );
-}
-function RecentVisits({
-  visits,
-  selectVisit,
-  showVisits,
-  now,
-}: {
-  visits: Visit[];
-  selectVisit: (id: string) => void;
-  showVisits: () => void;
-  now: string;
-}) {
-  return (
-    <>
-      <div className="recent-list">
-        {visits.map((visit) => (
-          <button
-            className="recent-row"
-            key={visit.id}
-            onClick={() => selectVisit(visit.id)}
-            aria-label={`Inspect ${visit.agentName}`}
-          >
-            <Avatar visit={visit} />
-            <span className="recent-person">
-              <strong>{visit.agentName}</strong>
-              <small>
-                {visit.attribution
-                  ? `${visit.attribution.provider} · ${visit.attribution.client}`
-                  : visit.isDemo
-                    ? 'Controlled demo'
-                    : sourceName(visit.source)}
-              </small>
-            </span>
-            <span className="recent-intent">
-              <strong className={visit.objective ? '' : 'is-unknown'}>{visitPurpose(visit)}</strong>
-              <small>
-                {visit.attribution?.referral.source ?? 'No referrer supplied'} ·{' '}
-                {visit.journey?.lastPath ?? visit.entryPath}
-              </small>
-            </span>
-            <Status visit={visit} />
-            <span className="recent-activity">
-              <strong>{count(visit.eventCount)}</strong>
-              <small>events</small>
-            </span>
-            <time dateTime={visit.createdAt} title={date(visit.createdAt)}>
-              {relative(visit.createdAt, now)}
-            </time>
-            <ArrowRight size={15} className="recent-arrow" aria-hidden="true" />
-          </button>
-        ))}
-      </div>
-      <div className="recent-footer">
-        <button className="text-button" onClick={showVisits}>
-          View all visits <ArrowRight size={15} />
-        </button>
-      </div>
-    </>
-  );
-}
-
 export default function App() {
   const readView = () => {
     const value = new URLSearchParams(location.search).get('view');
@@ -522,6 +449,25 @@ export default function App() {
       )}
     </a>
   );
+  const topNavItem = (item: (typeof views)[number]) => (
+    <a
+      key={item.id}
+      href={`${location.pathname}?view=${item.id}`}
+      aria-current={view === item.id ? 'page' : undefined}
+      className={`topnav-link ${view === item.id ? 'active' : ''} ${
+        item.id === 'project' ? 'topnav-secondary' : ''
+      }`}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        setView(item.id);
+        setMobileNav(false);
+        requestAnimationFrame(() => document.getElementById('workspace-main')?.focus());
+      }}
+    >
+      {item.name}
+    </a>
+  );
   return (
     <div className="app-shell">
       <a className="skip-link" href="#workspace-main">
@@ -596,26 +542,38 @@ export default function App() {
         </div>
       </aside>
       <div className="app-body" inert={mobileNav}>
-        <header className="topbar">
-          <button
-            ref={menuButton}
-            className="mobile-menu icon-button"
-            aria-label="Toggle navigation"
-            aria-expanded={mobileNav}
-            aria-controls="workspace-navigation"
-            onClick={() => setMobileNav((v) => !v)}
-          >
-            <List size={21} />
-          </button>
-          <div className="breadcrumb">
-            <span className="crumb-workspace">{data.site.name}</span>
-            <span className="crumb-sep">/</span>
-            <strong>{views.find((v) => v.id === view)?.name}</strong>
+        <header className="app-topnav">
+          <div className="topnav-left">
+            <button
+              ref={menuButton}
+              className="mobile-menu icon-button"
+              aria-label="Toggle navigation"
+              aria-expanded={mobileNav}
+              aria-controls="workspace-navigation"
+              onClick={() => setMobileNav((v) => !v)}
+            >
+              <List size={20} />
+            </button>
+            <a href="/" className="topnav-brand" aria-label="Arrival home">
+              <Brand />
+            </a>
           </div>
-          <div className="topbar-right">
-            <span className="connection">
+          <nav className="topnav-links" aria-label="Workspace pages">
+            {views.map(topNavItem)}
+          </nav>
+          <div className="topnav-actions">
+            <a
+              className="topnav-search"
+              href={`${location.pathname}?view=sessions`}
+              aria-label="Search workspace"
+            >
+              <MagnifyingGlass size={15} />
+              <span>Search</span>
+              <kbd>⌘K</kbd>
+            </a>
+            <span className="topnav-status" title="Workspace synced">
               <i />
-              Workspace synced
+              Live
             </span>
             <button
               className={`icon-button ${refreshing ? 'rotating' : ''}`}
@@ -623,8 +581,22 @@ export default function App() {
               title="Refresh data"
               aria-label="Refresh data"
             >
-              <ArrowClockwise size={17} />
+              <ArrowClockwise size={16} />
             </button>
+            <div className="topnav-account">
+              <span className="owner-avatar">{data.site.name.slice(0, 1).toUpperCase()}</span>
+              <span className="topnav-account-name">{data.site.name}</span>
+              <button
+                title="Sign out"
+                aria-label="Sign out"
+                onClick={async () => {
+                  await api('/auth/logout', { method: 'POST' });
+                  setLogin(true);
+                }}
+              >
+                <SignOut size={15} />
+              </button>
+            </div>
           </div>
         </header>
         <main className="main-content" id="workspace-main" tabIndex={-1}>
@@ -827,36 +799,24 @@ function OverviewPage({
       value: data.stats.visits,
       detail: 'Selected period',
       icon: Path,
-      visual: <MiniBars values={data.chart.map((point) => point.visits)} />,
     },
     {
       label: 'Purposes declared',
       value: data.stats.answered,
       detail: `${declaredShare}% shared a task`,
       icon: ListChecks,
-      visual: (
-        <span className="kpi-meter">
-          <i style={{ width: `${declaredShare}%` }} />
-        </span>
-      ),
     },
     {
       label: 'Automation signals',
       value: data.stats.automated,
       detail: `${automationShare}% show signals`,
       icon: Robot,
-      visual: (
-        <span className="kpi-meter ink">
-          <i style={{ width: `${automationShare}%` }} />
-        </span>
-      ),
     },
     {
       label: 'Events captured',
       value: data.stats.events,
       detail: `${eventsPerVisit} per visit`,
       icon: Eye,
-      visual: <MiniBars values={data.chart.map((point) => point.events)} tone="ink" />,
     },
   ];
   const entry = data.entry;
@@ -864,46 +824,109 @@ function OverviewPage({
     entry && entry.prompted ? Math.round((entry.answered / entry.prompted) * 100) : 0;
   return (
     <>
-      <div className="visibility-overview-link">
-        <div>
-          <strong>Connect the visit to its discovery.</strong>
-          <p>Explore crawlers, supplied queries, landing pages and agent goals together.</p>
-        </div>
-        <button className="text-button" onClick={openVisibility}>
-          Open visibility <ArrowRight size={15} />
-        </button>
-      </div>
-      <section className="kpi-grid" aria-label="Traffic summary">
-        {stats.map((stat) => (
-          <article className="kpi-card" key={stat.label}>
-            <div className="kpi-top">
-              <span className="kpi-label">{stat.label}</span>
-              <span className="kpi-icon">
-                <stat.icon size={15} weight="bold" aria-hidden="true" />
-              </span>
-            </div>
-            <strong className="kpi-value">{count(stat.value)}</strong>
-            <div className="kpi-foot">
-              <span className="kpi-note">{stat.detail}</span>
-              {stat.visual}
-            </div>
-          </article>
-        ))}
-      </section>
+      <div className="overview-hero-grid">
+        <section className="panel overview-hero-card">
+          <div className="kpi-grid kpi-grid-flush" aria-label="Traffic summary">
+            {stats.map((stat) => (
+              <article className="kpi-card" key={stat.label}>
+                <div className="kpi-top">
+                  <span className="kpi-label">{stat.label}</span>
+                  <span className="kpi-icon">
+                    <stat.icon size={15} weight="bold" aria-hidden="true" />
+                  </span>
+                </div>
+                <strong className="kpi-value">{count(stat.value)}</strong>
+                <div className="kpi-foot">
+                  <span className="kpi-note">{stat.detail}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="chart-panel chart-panel-flush">
+            <ActivityChart
+              points={data.chart}
+              empty={!data.stats.events}
+              compact
+              meta={`${count(data.stats.events)} events · ${count(data.stats.visits)} visits`}
+            />
+            {range === 'all' && (
+              <p className="chart-range-note">
+                The chart shows the latest 7 days. Totals cover all time.
+              </p>
+            )}
+          </div>
+        </section>
 
-      <section className="panel chart-panel">
-        <ActivityChart
-          points={data.chart}
-          empty={!data.stats.events}
-          compact
-          meta={`${count(data.stats.events)} events · ${count(data.stats.visits)} visits`}
-        />
-        {range === 'all' && (
-          <p className="chart-range-note">
-            The chart shows the latest 7 days. Totals cover all time.
-          </p>
-        )}
-      </section>
+        <aside className="overview-side" aria-label="Recent visitors">
+          <div className="side-heading">
+            <div>
+              <h2>Recent visitors</h2>
+              <p>Latest arrivals and what they disclosed</p>
+            </div>
+            <button type="button" className="text-button" onClick={showVisits}>
+              View all <ArrowRight size={14} />
+            </button>
+          </div>
+          {data.sessions.length ? (
+            <div className="side-list">
+              {data.sessions.slice(0, 4).map((visit) => (
+                <button
+                  type="button"
+                  className="side-visit"
+                  key={visit.id}
+                  onClick={() => selectVisit(visit.id)}
+                  aria-label={`Inspect ${visit.agentName}`}
+                >
+                  <Avatar visit={visit} />
+                  <span className="side-visit-main">
+                    <span className="side-visit-title">
+                      <strong>{visit.agentName}</strong>
+                      <time dateTime={visit.createdAt}>
+                        {relative(visit.createdAt, data.serverTime)}
+                      </time>
+                    </span>
+                    <small>
+                      {visit.attribution
+                        ? `${visit.attribution.provider} · ${visit.attribution.role}`
+                        : sourceName(visit.source)}
+                    </small>
+                    <span className="side-visit-tags">
+                      <Status visit={visit} />
+                      {visit.visibility && <TrafficBadge kind={visit.visibility.kind} />}
+                    </span>
+                    <span className="side-visit-foot">
+                      {visit.pageCount} pages · {visit.eventCount} events
+                    </span>
+                  </span>
+                  <ArrowRight size={14} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="side-empty">
+              <Path size={20} />
+              <h3>Your first arrival starts here.</h3>
+              <p>Connect a website to watch agents arrive and see what they do next.</p>
+              <div className="side-empty-actions">
+                <button type="button" className="button primary" onClick={connectSite}>
+                  Connect a website
+                </button>
+                {!data.site.workspace && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={demoBusy}
+                    onClick={runDemo}
+                  >
+                    <Play size={14} weight="fill" />
+                    {demoBusy ? 'Running…' : 'Run a demo agent'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
 
       <div className={`overview-triptych ${entry ? 'three' : 'two'}`}>
         <section className="panel source-panel">
@@ -1060,53 +1083,6 @@ function OverviewPage({
         )}
       </div>
 
-      <section className="panel recent-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Recent visits</h2>
-            <p>Declared intent alongside the activity you observed</p>
-          </div>
-          <span className="quiet-count">{count(data.stats.visits)} total</span>
-        </div>
-        {data.sessions.length ? (
-          <RecentVisits
-            visits={data.sessions.slice(0, 6)}
-            selectVisit={selectVisit}
-            showVisits={showVisits}
-            now={data.serverTime}
-          />
-        ) : (
-          <Empty
-            title="Your first arrival starts here."
-            action={
-              <div className="inline-actions">
-                <button className="button primary" onClick={connectSite}>
-                  <Code size={16} />
-                  Connect a website
-                </button>
-                {!data.site.workspace && (
-                  <button className="button secondary" disabled={demoBusy} onClick={runDemo}>
-                    <Play size={16} weight="fill" />
-                    {demoBusy ? 'Running a real HTTP visit…' : 'Run a demo agent'}
-                  </button>
-                )}
-                <a
-                  className="button secondary"
-                  href={data.site.origin}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Visit your website <ArrowSquareOut size={16} />
-                </a>
-              </div>
-            }
-          >
-            Once connected, incoming visits appear here. Open your website with an agent to see its
-            first trail. Your customer data starts empty.
-          </Empty>
-        )}
-      </section>
-
       <div className="overview-lower">
         <section className="panel pages-panel">
           <div className="panel-heading">
@@ -1203,19 +1179,23 @@ function VisitTable({
                 <td>
                   <button className="visitor-cell" onClick={() => selectVisit(visit.id)}>
                     <Avatar visit={visit} />
-                    <span>
-                      <strong>{visit.agentName}</strong>
-                      {visit.visibility && <TrafficBadge kind={visit.visibility.kind} />}
-                      <small>{visit.isDemo ? 'Controlled demo' : sourceName(visit.source)}</small>
-                      {visit.attribution && (
+                    <span className="visitor-copy">
+                      <span className="visitor-name-row">
+                        <strong>{visit.agentName}</strong>
+                        {visit.visibility && <TrafficBadge kind={visit.visibility.kind} />}
+                        {visit.isDemo && <span className="visitor-demo">Demo</span>}
+                      </span>
+                      {visit.attribution ? (
                         <>
-                          <span className="visit-client-context">
+                          <small>
                             {visit.attribution.provider} · {visit.attribution.role}
-                          </span>
+                          </small>
                           <span className="visit-context-label">
                             {visit.attribution.confidence}
                           </span>
                         </>
+                      ) : (
+                        <small>{sourceName(visit.source)}</small>
                       )}
                     </span>
                   </button>

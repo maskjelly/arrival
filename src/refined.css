@@ -1,0 +1,1846 @@
+/* Visual refresh: soft canvas, floating workspace, top navigation.
+   The reference is a light, spacious dashboard with borderless cards,
+   pill controls and a single floating work surface. These rules are scoped
+   to the authenticated app so marketing and onboarding keep their language. */
+
+:root {
+  --shell-bg: #d9dce5;
+}
+
+body:has(.app-shell) {
+  background:
+    radial-gradient(1100px 700px at 22% -10%, #e9e4fb 0%, transparent 60%),
+    radial-gradient(900px 600px at 94% 8%, #e7ecf7 0%, transparent 55%),
+    linear-gradient(160deg, #e2e4eb 0%, #d4d7e1 55%, #cfd2dc 100%);
+  background-attachment: fixed;
+}
+
+.app-shell {
+  display: block;
+  min-height: 100dvh;
+  padding: 18px;
+  background: transparent;
+  --muted: #5f6878;
+  --faint: #626a7a;
+}
+
+/* The sidebar is the mobile navigation drawer only. Desktop navigation lives
+   in the top bar, as in the reference. */
+.app-shell .sidebar {
+  display: none;
+}
+
+.app-shell .app-body {
+  width: 100%;
+  max-width: 1480px;
+  min-height: calc(100dvh - 36px);
+  margin: 0 auto;
+  border-radius: 26px;
+  background: #f5f6f9;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 8%),
+    0 28px 80px -32px rgb(22 27 45 / 38%);
+  overflow: hidden;
+}
+
+/* ── Top navigation ─────────────────────────────────────────────────────── */
+.app-shell .app-topnav {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 72px;
+  padding: 0 28px;
+  background: #f5f6f9;
+}
+
+.topnav-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.topnav-brand {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.app-shell .topnav-brand .brand {
+  color: #191b25;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+}
+
+.app-shell .topnav-brand .brand-mark {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 9px;
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 0 6px 14px -6px rgb(79 70 229 / 55%);
+}
+
+.app-shell .topnav-brand .brand-period {
+  color: #4f46e5;
+}
+
+.app-shell .topnav-brand .brand-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.topnav-links {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 2px;
+  min-width: 0;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.app-shell .topnav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  color: #5f6878;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app-shell .topnav-link:hover {
+  color: #191b25;
+}
+
+.app-shell .topnav-link.active {
+  color: #191b25;
+  font-weight: 650;
+}
+
+.app-shell .topnav-link.active::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 14px;
+  height: 2px;
+  border-radius: 99px;
+  background: #191b25;
+}
+
+.topnav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-shell .topnav-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: 178px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 99px;
+  background: #fff;
+  color: #626a7a;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 20%);
+  font-size: 11.5px;
+}
+
+.app-shell .topnav-search:hover {
+  color: #4f46e5;
+}
+
+.app-shell .topnav-search kbd {
+  margin-left: auto;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.app-shell .topnav-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #5f6878;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-shell .topnav-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #21a56d;
+  box-shadow: 0 0 0 3px rgb(33 165 109 / 12%);
+}
+
+.app-shell .topnav-actions .icon-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #757d8d;
+}
+
+.app-shell .topnav-actions .icon-button:hover {
+  background: #fff;
+  color: #191b25;
+}
+
+.topnav-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 2px;
+  padding-left: 10px;
+  border-left: 1px solid #e3e6ed;
+}
+
+.app-shell .topnav-account .owner-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #4f46e5, #7b74f0);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px -5px rgb(79 70 229 / 55%);
+}
+
+.topnav-account-name {
+  max-width: 120px;
+  overflow: hidden;
+  color: #3d4352;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .topnav-account button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #959baa;
+}
+
+.app-shell .topnav-account button:hover {
+  background: #fff;
+  color: #191b25;
+}
+
+.app-shell .app-topnav .mobile-menu {
+  display: none;
+}
+
+/* ── Content surface ────────────────────────────────────────────────────── */
+.app-shell .main-content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 10px 28px 34px;
+  background: transparent;
+}
+
+.app-shell .page-heading {
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.app-shell .page-heading h1 {
+  font-size: 35px;
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+}
+
+.app-shell .page-heading p {
+  margin-top: 5px;
+  color: #5f6878;
+  font-size: 13px;
+}
+
+.app-shell .section-context {
+  display: none;
+}
+
+.app-shell .page-title-row {
+  gap: 10px;
+}
+
+.app-shell .live-badge {
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 99px;
+  background: #e9f7ef;
+  color: #157347;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.app-shell .live-badge i {
+  width: 5px;
+  height: 5px;
+  background: #21a56d;
+  box-shadow: 0 0 0 3px rgb(33 165 109 / 14%);
+}
+
+/* One pill for the period, one for export. */
+.app-shell .range-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 99px;
+  background: #fff;
+  color: #5f6878;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+}
+
+.app-shell .range-picker > svg {
+  margin: 0;
+  color: #848b9b;
+}
+
+.app-shell .range-picker select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 92px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #3d4352;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  outline: 0;
+  cursor: pointer;
+}
+
+.app-shell .range-picker select:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.app-shell .range-picker > svg:last-child {
+  margin-left: -2px;
+  color: #8c92a1;
+  pointer-events: none;
+}
+
+.app-shell .heading-actions {
+  gap: 8px;
+  padding-bottom: 1px;
+}
+
+.app-shell .heading-actions .button,
+.app-shell .button {
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #3d4352;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.app-shell .button:hover {
+  color: #191b25;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 7%),
+    0 8px 18px -10px rgb(22 27 45 / 24%);
+}
+
+.app-shell .button.primary {
+  background: #4f46e5;
+  color: #fff;
+  box-shadow: 0 8px 18px -10px rgb(79 70 229 / 60%);
+}
+
+.app-shell .button.primary:hover {
+  background: #4338ca;
+}
+
+.app-shell .text-button {
+  color: #4f46e5;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* ── The card system ────────────────────────────────────────────────────── */
+.app-shell .panel {
+  border: 0;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 28%);
+}
+
+.app-shell .panel-heading {
+  padding: 20px 22px 8px;
+}
+
+.app-shell .panel-heading h2 {
+  color: #191b25;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.45px;
+}
+
+.app-shell .panel-heading p {
+  margin-top: 4px;
+  color: #5f6878;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.app-shell .quiet-count {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 99px;
+  background: #f3f4f8;
+  color: #5f6878;
+  font-size: 9.5px;
+}
+
+/* KPI row: one surface, four columns, no nested boxes. */
+.app-shell .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 28%);
+}
+
+.app-shell .kpi-card {
+  padding: 20px 22px 17px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell .kpi-card + .kpi-card {
+  border-left: 1px solid #eef0f5;
+}
+
+.app-shell .kpi-card::after {
+  display: none;
+}
+
+.app-shell .kpi-label {
+  color: #5f6878;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.app-shell .kpi-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  background: transparent;
+  color: #a3a9b6;
+}
+
+.app-shell .kpi-value {
+  margin: 13px 0 10px;
+  color: #191b25;
+  font-size: 38px;
+  font-weight: 650;
+  letter-spacing: -1.9px;
+}
+
+.app-shell .kpi-note {
+  max-width: 17ch;
+  color: #626a7a;
+  font-size: 10.5px;
+}
+
+.app-shell .mini-bars {
+  width: 74px;
+  height: 28px;
+}
+
+.app-shell .mini-bars span {
+  border-radius: 3px 3px 2px 2px;
+  background: #eceef4;
+}
+
+.app-shell .mini-bars span.latest {
+  background: #4f46e5;
+}
+
+.app-shell .mini-bars.ink span.latest {
+  background: #8b91a0;
+}
+
+.app-shell .kpi-meter {
+  width: 74px;
+  height: 5px;
+  margin-bottom: 10px;
+  background: #f0f1f6;
+}
+
+.app-shell .kpi-meter i {
+  background: #4f46e5;
+}
+
+.app-shell .kpi-meter.ink i {
+  background: #8b91a0;
+}
+
+/* Chart panel lives directly on the card system, with more air around it. */
+.app-shell .chart-panel {
+  margin-bottom: 16px;
+  border-radius: 22px;
+}
+
+.app-shell .chart-panel .activity-toolbar {
+  padding: 20px 22px 4px;
+}
+
+.app-shell .chart-panel .activity-toolbar h2 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.45px;
+}
+
+.app-shell .chart-panel .activity-toolbar > div > span {
+  margin-top: 4px;
+  color: #5f6878;
+  font-size: 11.5px;
+}
+
+.app-shell .chart-panel .client-select {
+  height: 32px;
+  border: 0;
+  border-radius: 99px;
+  background: #f5f6f9;
+  box-shadow: none;
+}
+
+.app-shell .chart-panel .activity-plot {
+  padding: 14px 16px 0;
+}
+
+.app-shell .chart-panel .activity-plot > svg {
+  max-height: 285px;
+}
+
+.app-shell .chart-panel .activity-footer {
+  padding: 4px 22px 18px;
+}
+
+.app-shell .chart-panel .chart-legend {
+  font-size: 10px;
+}
+
+.app-shell .chart-panel .activity-footer > label {
+  font-size: 9.5px;
+}
+
+.app-shell .chart-panel .activity-tooltip {
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -18px rgb(22 27 45 / 35%);
+}
+
+/* Triptychs and insights become one surface with airy dividers. */
+.app-shell .overview-triptych,
+.app-shell .vis-insight-grid {
+  gap: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 28%);
+}
+
+.app-shell .overview-triptych > .panel,
+.app-shell .vis-insight-grid > .panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell .overview-triptych > .panel + .panel,
+.app-shell .vis-insight-grid > .panel + .panel {
+  border-left: 1px solid #eef0f5;
+}
+
+.app-shell .overview-triptych > .panel .panel-heading,
+.app-shell .vis-insight-grid > .panel .panel-heading,
+.app-shell .overview-triptych > .panel .vis-panel-head,
+.app-shell .vis-insight-grid > .panel .vis-panel-head {
+  padding-top: 18px;
+}
+
+.app-shell .overview-lower {
+  gap: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 28%);
+}
+
+.app-shell .overview-lower > .panel,
+.app-shell .overview-lower > .start-panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-shell .overview-lower > .start-panel {
+  border-left: 1px solid #eef0f5;
+  background:
+    radial-gradient(100% 120% at 100% 0%, #f1efff 0%, transparent 62%),
+    linear-gradient(160deg, #fbfaff 0%, #f6f5ff 100%);
+}
+
+/* Recent visits reads like a list of small cards, not table rows inside a box. */
+.app-shell .recent-panel {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.app-shell .recent-list {
+  padding: 4px 12px 2px;
+  border-top: 0;
+}
+
+.app-shell .recent-row {
+  border: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  min-height: 52px;
+}
+
+.app-shell .recent-row:hover {
+  background: #f7f8fb;
+}
+
+.app-shell .recent-row .avatar {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: #f0efff;
+  color: #4f46e5;
+}
+
+.app-shell .recent-person strong {
+  font-size: 12px;
+}
+
+.app-shell .recent-person small,
+.app-shell .recent-intent small {
+  font-size: 9.5px;
+}
+
+.app-shell .recent-intent strong {
+  font-size: 11.5px;
+}
+
+.app-shell .recent-footer {
+  padding: 9px 18px 13px;
+  border-top: 1px solid #f1f2f6;
+}
+
+/* Pages and small lists use row highlights rather than nested outlines. */
+.app-shell .pages-list {
+  padding: 0 20px 8px;
+}
+
+.app-shell .pages-list > div {
+  border-bottom: 0;
+  padding: 9px 0;
+}
+
+.app-shell .pages-list > div + div {
+  border-top: 1px solid #f2f3f7;
+}
+
+.app-shell .start-panel {
+  padding: 20px 22px;
+}
+
+.app-shell .start-symbol {
+  border: 0;
+  border-radius: 11px;
+  background: #ecebff;
+  color: #4f46e5;
+}
+
+.app-shell .start-meta {
+  color: #7d7395;
+}
+
+.app-shell .start-panel h2 {
+  font-family: 'Manrope Variable', sans-serif;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.55px;
+}
+
+.app-shell .start-panel p {
+  color: #5f6878;
+  font-size: 11.5px;
+}
+
+/* The scorecard-like request evidence section becomes one clean strip. */
+.app-shell .context-breakdowns {
+  margin-bottom: 16px;
+  border-radius: 20px;
+}
+
+.app-shell .context-breakdown-panels {
+  border-top: 1px solid #f1f2f6;
+}
+
+.app-shell .context-breakdown {
+  padding: 16px 22px 18px;
+}
+
+.app-shell .context-breakdown + .context-breakdown {
+  border-left: 1px solid #f1f2f6;
+}
+
+/* ── Hero placement: report + recent list ────────────────────────────────── */
+.app-shell .overview-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.3fr) minmax(330px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.app-shell .overview-hero-card {
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.app-shell .overview-hero-card .kpi-grid {
+  margin: 0;
+  border-radius: 0;
+  border-bottom: 1px solid #eef0f5;
+  box-shadow: none;
+}
+
+.app-shell .overview-hero-card .kpi-card {
+  padding: 18px 20px 15px;
+}
+
+.app-shell .overview-hero-card .kpi-value {
+  font-size: 34px;
+}
+
+.app-shell .overview-hero-card .chart-panel {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-shell .overview-hero-card .chart-panel .activity-toolbar {
+  padding-top: 17px;
+}
+
+.app-shell .overview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-shell .side-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 2px;
+}
+
+.app-shell .side-heading h2 {
+  color: #191b25;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.45px;
+}
+
+.app-shell .side-heading p {
+  margin-top: 3px;
+  color: #5f6878;
+  font-size: 11px;
+}
+
+.app-shell .side-heading .text-button {
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+.app-shell .side-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-shell .side-visit {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 4%),
+    0 10px 24px -20px rgb(22 27 45 / 30%);
+}
+
+.app-shell .side-visit:hover {
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 14px 28px -18px rgb(22 27 45 / 34%);
+  transform: translateY(-1px);
+}
+
+.app-shell .side-visit .avatar {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: #f0efff;
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.app-shell .side-visit-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-shell .side-visit-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell .side-visit-title strong {
+  overflow: hidden;
+  color: #191b25;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .side-visit-title time {
+  flex-shrink: 0;
+  color: #626a7a;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.app-shell .side-visit-main > small {
+  overflow: hidden;
+  color: #616979;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .side-visit-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.app-shell .side-visit-tags .status,
+.app-shell .side-visit-tags .traffic-badge {
+  padding: 2px 6px;
+  font-size: 8px;
+}
+
+.app-shell .side-visit-foot {
+  margin-top: 1px;
+  color: #6b7280;
+  font-size: 9.5px;
+}
+
+.app-shell .side-visit > svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+  color: #b2b7c2;
+}
+
+.app-shell .side-visit:hover > svg {
+  color: #4f46e5;
+}
+
+.app-shell .side-empty {
+  padding: 26px 22px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 4%),
+    0 10px 24px -20px rgb(22 27 45 / 30%);
+  text-align: center;
+}
+
+.app-shell .side-empty > svg {
+  color: #8f96a5;
+}
+
+.app-shell .side-empty h3 {
+  margin: 10px 0 5px;
+  color: #191b25;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.app-shell .side-empty p {
+  margin: 0 auto 14px;
+  max-width: 30ch;
+  color: #5f6878;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.app-shell .side-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+}
+
+/* Visibility hero: metrics and mix on the left, recognized visitors on the right. */
+.app-shell .vis-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.3fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.app-shell .vis-hero-card {
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.app-shell .vis-hero-card .kpi-grid {
+  margin: 0;
+  border-radius: 0;
+  border-bottom: 1px solid #eef0f5;
+  box-shadow: none;
+}
+
+.app-shell .vis-hero-card .kpi-card {
+  padding: 17px 20px 14px;
+}
+
+.app-shell .vis-hero-card .kpi-value {
+  font-size: 32px;
+}
+
+.app-shell .vis-hero-card .vis-mix-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell .vis-hero-card .vis-mix-panel .vis-panel-head {
+  padding-top: 16px;
+}
+
+.app-shell .vis-hero-card .vis-mix-bar {
+  margin-top: 0;
+}
+
+.app-shell .vis-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-shell .vis-side-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-shell .vis-side-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  color: #5f6878;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.app-shell .vis-side-label small {
+  margin-left: auto;
+  color: #626a7a;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.app-shell .vis-side-client {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 14px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 4%),
+    0 10px 24px -20px rgb(22 27 45 / 30%);
+}
+
+.app-shell .vis-side-client:hover {
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 14px 28px -18px rgb(22 27 45 / 34%);
+  transform: translateY(-1px);
+}
+
+.app-shell .vis-side-client .client-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 9px;
+  background: #f0efff;
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.app-shell .vis-side-client-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.app-shell .vis-side-client-main strong {
+  overflow: hidden;
+  color: #191b25;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .vis-side-client-main small {
+  overflow: hidden;
+  color: #616979;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .vis-side-client-count {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.app-shell .vis-side-client-count strong {
+  display: block;
+  color: #191b25;
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .vis-side-client-count small {
+  display: block;
+  color: #626a7a;
+  font-size: 8.5px;
+}
+
+.app-shell .vis-side-client > svg {
+  flex-shrink: 0;
+  color: #b2b7c2;
+}
+
+.app-shell .vis-side-client:hover > svg {
+  color: #4f46e5;
+}
+
+.app-shell .vis-side-empty {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f7f8fa;
+  color: #616979;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.app-shell .vis-bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: stretch;
+}
+
+.app-shell .vis-bottom-grid > .panel {
+  border-radius: 20px;
+}
+
+.app-shell .vis-coverage-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-shell .vis-coverage-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 4px 10px 10px;
+}
+
+.app-shell .vis-coverage-metrics > div {
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.app-shell .vis-coverage-metrics > div + div {
+  border-left: 1px solid #eef0f5;
+}
+
+.app-shell .vis-coverage-metrics span:first-child {
+  display: block;
+  overflow: hidden;
+  color: #5f6878;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .vis-coverage-metrics strong {
+  display: block;
+  margin: 5px 0 7px;
+  color: #191b25;
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -1px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell .vis-coverage-track {
+  display: block;
+  height: 3px;
+  border-radius: 99px;
+  background: #f0f1f6;
+  overflow: hidden;
+}
+
+.app-shell .vis-coverage-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #4f46e5;
+}
+
+.app-shell .vis-coverage-metrics small {
+  display: block;
+  margin-top: 5px;
+  color: #626a7a;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.app-shell .vis-coverage-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: auto;
+  padding: 10px 14px;
+  border-top: 1px solid #f1f2f6;
+  color: #616979;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.app-shell .vis-coverage-note > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.app-shell .vis-coverage-note p {
+  flex: 1;
+  margin: 0;
+}
+
+.app-shell .vis-coverage-note .text-button {
+  flex-shrink: 0;
+  font-size: 8.5px;
+}
+
+/* Floating filter pills, not another enclosing card. */
+.app-shell .visibility-toolbar {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell .visibility-search {
+  height: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+}
+
+.app-shell .visibility-search:focus-within {
+  border: 0;
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.app-shell .visibility-toolbar select {
+  height: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+  padding: 0 13px;
+}
+
+.app-shell .visibility-toolbar .button.small,
+.app-shell .visibility-toolbar .icon-button {
+  height: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+}
+
+.app-shell .visibility-toolbar .icon-button {
+  width: 36px;
+}
+
+.app-shell .visibility-toolbar .icon-button:hover {
+  background: #fff;
+  color: #4f46e5;
+}
+
+.app-shell .demo-toggle {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #5f6878;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 5%),
+    0 4px 12px -8px rgb(22 27 45 / 18%);
+}
+
+/* ── Visits table: compact visitor identity ─────────────────────────────── */
+.app-shell .visit-table th {
+  padding: 9px 14px;
+}
+
+.app-shell .visit-table td {
+  padding: 10px 14px;
+}
+
+.app-shell .visit-table td:first-child {
+  padding-left: 20px;
+}
+
+.app-shell .visitor-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-shell .visitor-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-shell .visitor-name-row strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .visitor-name-row .traffic-badge {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  font-size: 7.5px;
+}
+
+.app-shell .visitor-demo {
+  flex-shrink: 0;
+  padding: 2px 5px;
+  border-radius: 99px;
+  background: #f1f2f6;
+  color: #5f6878;
+  font-size: 7.5px;
+  font-weight: 600;
+}
+
+.app-shell .visitor-copy small {
+  overflow: hidden;
+  color: #5f6878;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell .visitor-copy .visit-context-label {
+  margin-top: 0;
+  color: #626a7a;
+  font-size: 8.5px;
+}
+
+/* ── Visibility summary ─────────────────────────────────────────────────── */
+.app-shell .vis-context {
+  padding: 0 4px;
+  color: #5f6878;
+}
+
+.app-shell .vis-query-note {
+  border: 0;
+  border-radius: 14px;
+  background: #f0efff;
+}
+
+.app-shell .vis-mix-panel,
+.app-shell .vis-pages-panel,
+.app-shell .vis-sources-panel {
+  padding-bottom: 0;
+}
+
+.app-shell .vis-clients-panel {
+  margin-bottom: 16px;
+  border-radius: 20px;
+}
+
+.app-shell .vis-client-groups {
+  border-top: 1px solid #f1f2f6;
+}
+
+.app-shell .vis-client-row {
+  border-radius: 12px;
+}
+
+.app-shell .vis-client-row:hover {
+  background: #f7f8fb;
+}
+
+.app-shell .vis-client-row .client-mark {
+  border: 0;
+  border-radius: 9px;
+  background: #f0efff;
+  color: #4f46e5;
+}
+
+.app-shell .vis-report {
+  border-radius: 20px;
+}
+
+.app-shell .visibility-report-tabs {
+  border-bottom: 1px solid #eef0f5;
+}
+
+.app-shell .visibility-table th {
+  border-block: 1px solid #eef0f5;
+  background: #fafbfc;
+}
+
+.app-shell .visibility-table tbody tr:hover td {
+  background: #f8f9fc;
+}
+
+/* ── Secondary pages: keep the new surface language ─────────────────────── */
+.app-shell .stats-strip {
+  gap: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 28%);
+}
+
+.app-shell .stats-strip .stat {
+  padding: 20px 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell .stats-strip .stat + .stat {
+  border-left: 1px solid #eef0f5;
+}
+
+.app-shell .question-card,
+.app-shell .entry-policy,
+.app-shell .setup-panel,
+.app-shell .integration-aside {
+  border: 0;
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 24%);
+}
+
+.app-shell .question-aside {
+  border: 0;
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgb(22 27 45 / 3%),
+    0 16px 34px -28px rgb(22 27 45 / 24%);
+}
+
+.app-shell .code-block {
+  border: 0;
+  border-radius: 14px;
+  background: #101322;
+  color: #d9dce8;
+}
+
+.app-shell .code-block pre {
+  color: #d9dce8;
+}
+
+.app-shell .app-footer {
+  margin-top: 20px;
+  border-top: 1px solid #e7e9ef;
+  color: #5f6878;
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+@media (max-width: 1260px) {
+  .app-shell .topnav-search {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+  .app-shell .topnav-search span,
+  .app-shell .topnav-search kbd {
+    display: none;
+  }
+  .app-shell .topnav-link {
+    padding-inline: 8px;
+  }
+  .app-shell .topnav-link.active::after {
+    left: 8px;
+    right: 8px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .app-shell .topnav-link.topnav-secondary {
+    display: none;
+  }
+  .app-shell .topnav-account-name {
+    display: none;
+  }
+  .app-shell .overview-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .side-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .app-shell .vis-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .vis-bottom-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .app-shell .vis-coverage-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    padding: 10px;
+  }
+  .app-shell .sidebar {
+    position: fixed;
+    inset: 10px auto 10px 10px;
+    display: flex;
+    width: 300px;
+    max-width: calc(100vw - 20px);
+    height: auto;
+    max-height: calc(100dvh - 20px);
+    margin: 0;
+    padding: 18px 14px 14px;
+    border: 0;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 30px 80px -28px rgb(22 27 45 / 42%);
+    transform: translateX(-112%);
+    visibility: hidden;
+    z-index: 60;
+  }
+  .app-shell .sidebar.mobile-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  .app-shell .nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    border: 0;
+    background: rgb(22 27 45 / 34%);
+    backdrop-filter: blur(3px);
+  }
+  .app-shell .sidebar .workspace {
+    margin: 0 0 12px;
+    padding: 10px;
+    border: 0;
+    border-radius: 14px;
+    background: #f7f8fa;
+  }
+  .app-shell .sidebar nav a {
+    border-radius: 10px;
+  }
+  .app-shell .sidebar nav a.active {
+    background: #efefff;
+    color: #4f46e5;
+  }
+  .app-shell .sidebar-note {
+    margin-top: auto;
+    border: 0;
+    border-radius: 14px;
+    background: #f7f8fa;
+  }
+  .app-shell .sidebar-head {
+    padding: 2px 6px 14px;
+  }
+  .app-shell .sidebar-bottom {
+    border-top: 1px solid #eef0f5;
+  }
+  .app-shell .app-body {
+    min-height: calc(100dvh - 20px);
+    border-radius: 20px;
+  }
+  .app-shell .app-topnav {
+    gap: 10px;
+    min-height: 62px;
+    padding: 0 16px;
+  }
+  .app-shell .topnav-links {
+    display: none;
+  }
+  .app-shell .topnav-actions {
+    margin-left: auto;
+  }
+  .app-shell .app-topnav .mobile-menu {
+    display: inline-grid;
+  }
+  .app-shell .topnav-status {
+    display: none;
+  }
+  .app-shell .topnav-account {
+    padding-left: 8px;
+  }
+  .app-shell .topnav-account-name {
+    display: none;
+  }
+  .app-shell .main-content {
+    padding: 8px 18px 28px;
+  }
+  .app-shell .heading-actions > select {
+    min-height: 36px;
+    border: 0;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow:
+      0 1px 2px rgb(22 27 45 / 5%),
+      0 4px 12px -8px rgb(22 27 45 / 18%);
+    padding: 0 12px;
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    padding: 0;
+  }
+  .app-shell .app-body {
+    min-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .app-shell .app-topnav {
+    min-height: 56px;
+    padding: 0 14px;
+    background: #f5f6f9;
+  }
+  .app-shell .topnav-brand .brand {
+    font-size: 19px;
+  }
+  .app-shell .topnav-brand .brand-mark {
+    width: 27px;
+    height: 27px;
+    border-radius: 8px;
+  }
+  .app-shell .topnav-account {
+    border-left: 0;
+    padding-left: 0;
+    margin-left: 0;
+  }
+  .app-shell .topnav-account .owner-avatar {
+    width: 29px;
+    height: 29px;
+  }
+  .app-shell .topnav-search {
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    box-shadow: none;
+  }
+  .app-shell .main-content {
+    padding: 18px 14px 34px;
+  }
+  .app-shell .page-heading {
+    display: block;
+    margin-bottom: 17px;
+  }
+  .app-shell .page-heading h1 {
+    font-size: 28px;
+    letter-spacing: -1.1px;
+  }
+  .app-shell .page-heading p {
+    font-size: 12px;
+  }
+  .app-shell .heading-actions {
+    width: 100%;
+    margin-top: 13px;
+  }
+  .app-shell .range-picker {
+    flex: 1;
+  }
+  .app-shell .heading-actions .button {
+    flex-shrink: 0;
+  }
+  .app-shell .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .app-shell .kpi-card:nth-child(3) {
+    border-left: 0;
+  }
+  .app-shell .kpi-card:nth-child(-n + 2) {
+    border-bottom: 1px solid #eef0f5;
+  }
+  .app-shell .kpi-card {
+    padding: 16px;
+  }
+  .app-shell .kpi-value {
+    font-size: 29px;
+  }
+  .app-shell .kpi-note {
+    font-size: 9.5px;
+  }
+  .app-shell .mini-bars,
+  .app-shell .kpi-meter {
+    width: 52px;
+  }
+  .app-shell .panel-heading {
+    padding: 17px 16px 7px;
+  }
+  .app-shell .panel-heading h2 {
+    font-size: 16px;
+  }
+  .app-shell .overview-triptych,
+  .app-shell .vis-insight-grid,
+  .app-shell .overview-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .overview-triptych > .panel + .panel,
+  .app-shell .vis-insight-grid > .panel + .panel {
+    border-top: 1px solid #eef0f5;
+    border-left: 0;
+  }
+  .app-shell .overview-lower > .start-panel {
+    border-top: 1px solid #eef0f5;
+    border-left: 0;
+  }
+  .app-shell .side-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .vis-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .recent-row {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'avatar person status'
+      'avatar intent intent'
+      'avatar meta arrow';
+    gap: 2px 9px;
+    padding: 11px 12px;
+  }
+  .app-shell .recent-row .avatar {
+    grid-area: avatar;
+    width: 30px;
+    height: 30px;
+  }
+  .app-shell .recent-person {
+    grid-area: person;
+  }
+  .app-shell .recent-intent {
+    grid-area: intent;
+    padding-top: 2px;
+  }
+  .app-shell .recent-row > .status {
+    grid-area: status;
+    justify-self: end;
+  }
+  .app-shell .recent-activity {
+    grid-area: meta;
+    justify-self: start;
+    padding-top: 4px;
+  }
+  .app-shell .recent-row time {
+    display: none;
+  }
+  .app-shell .recent-arrow {
+    grid-area: arrow;
+    justify-self: end;
+  }
+  .app-shell .recent-footer {
+    padding-inline: 15px;
+  }
+  .app-shell .context-breakdown-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell .context-breakdown + .context-breakdown {
+    border-top: 1px solid #f1f2f6;
+    border-left: 0;
+  }
+  .app-shell .stats-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .app-shell .stats-strip .stat {
+    padding: 16px;
+  }
+  .app-shell .stats-strip .stat:nth-child(3) {
+    border-left: 0;
+  }
+  .app-shell .stats-strip .stat:nth-child(-n + 2) {
+    border-bottom: 1px solid #eef0f5;
+  }
+  .app-shell .app-footer {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell .topnav-brand .brand {
+    font-size: 18px;
+  }
+  .app-shell .page-heading h1 {
+    font-size: 26px;
+  }
+  .app-shell .kpi-value {
+    font-size: 26px;
+  }
+  .app-shell .mini-bars,
+  .app-shell .kpi-meter {
+    width: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .live-badge i {
+    animation: none;
+  }
+}

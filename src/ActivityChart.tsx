@@ -6,14 +6,23 @@ import { useChartPaths } from './motion.ts';
 type Point = Overview['chart'][number];
 const number = (v: number) =>
   new Intl.NumberFormat('en', { notation: v > 9999 ? 'compact' : 'standard' }).format(v);
+const niceMaximum = (value: number) => {
+  const steps = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250, 300, 400, 500];
+  const step = steps.find((candidate) => candidate * 4 >= value);
+  if (step) return step * 4;
+  const magnitude = 10 ** Math.max(1, Math.floor(Math.log10(value / 4)));
+  return Math.ceil(value / 4 / magnitude) * magnitude * 4;
+};
 export function ActivityChart({
   points,
   empty = false,
   compact = false,
+  meta,
 }: {
   points: Point[];
   empty?: boolean;
   compact?: boolean;
+  meta?: string;
 }) {
   const [small, setSmall] = useState(() => matchMedia('(max-width:650px)').matches);
   useEffect(() => {
@@ -51,7 +60,7 @@ export function ActivityChart({
     right = 18,
     top = 22,
     bottom = 35;
-  const maximum = Math.max(4, ...chart.flatMap((p) => [p.events, p.visits]));
+  const maximum = niceMaximum(Math.max(4, ...chart.flatMap((p) => [p.events, p.visits])));
   const x = (i: number) => left + (i * (width - left - right)) / Math.max(1, chart.length - 1);
   const y = (value: number) => top + (height - top - bottom) * (1 - value / maximum);
   const line = (key: 'events' | 'visits') =>
@@ -129,31 +138,34 @@ export function ActivityChart({
           <h2>Traffic over time</h2>
           <span>Visits and the trail they leave</span>
         </div>
-        <label className="client-select">
-          <span className="sr-only">Chart client</span>
-          {selected ? (
-            <ClientMark name={selected} />
-          ) : (
-            <span className="client-stack">
-              <ClientMark name="OpenAI" />
-              <ClientMark name="Claude" />
-              <ClientMark name="Perplexity" />
-            </span>
-          )}
-          <select
-            aria-label="Chart client"
-            value={selected}
-            onChange={(e) => {
-              setClient(e.target.value);
-              setActive(null);
-            }}
-          >
-            <option value="">All clients</option>
-            {clients.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
+        <div className="activity-toolbar-actions">
+          {meta && <span className="activity-meta">{meta}</span>}
+          <label className="client-select">
+            <span className="sr-only">Chart client</span>
+            {selected ? (
+              <ClientMark name={selected} />
+            ) : (
+              <span className="client-stack">
+                <ClientMark name="OpenAI" />
+                <ClientMark name="Claude" />
+                <ClientMark name="Perplexity" />
+              </span>
+            )}
+            <select
+              aria-label="Chart client"
+              value={selected}
+              onChange={(e) => {
+                setClient(e.target.value);
+                setActive(null);
+              }}
+            >
+              <option value="">All clients</option>
+              {clients.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <div className="activity-plot" ref={plot} onPointerLeave={() => setActive(null)}>
         <svg
@@ -174,14 +186,14 @@ export function ActivityChart({
                 x2={width - right}
                 y1={y(maximum * r)}
                 y2={y(maximum * r)}
-                stroke="#e8e5e2"
-                strokeDasharray="4 7"
+                stroke={compact ? '#eee8e3' : '#e8e5e2'}
+                strokeDasharray={compact ? undefined : '4 7'}
               />
               <text
                 x={left - 12}
                 y={y(maximum * r) + 4}
                 textAnchor="end"
-                fill="#77716d"
+                fill={compact ? '#7d736c' : '#77716d'}
                 fontSize="11"
               >
                 {number(Math.round(maximum * r))}
@@ -234,7 +246,7 @@ export function ActivityChart({
                   x={x(i)}
                   y={height - 7}
                   textAnchor={i === 0 ? 'start' : i === chart.length - 1 ? 'end' : 'middle'}
-                  fill="#77716d"
+                  fill={compact ? '#7d736c' : '#77716d'}
                   fontSize="11"
                 >
                   {label(p.time)}

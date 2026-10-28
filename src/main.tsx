@@ -6,6 +6,7 @@ import { MotionEnvironment } from './motion.ts';
 import './motion.css';
 import Landing from './Landing.tsx';
 import './style.css';
+import './dashboard.css';
 import Onboarding from './Onboarding.tsx';
 import '@fontsource-variable/manrope';
 createRoot(document.getElementById('root')!).render(

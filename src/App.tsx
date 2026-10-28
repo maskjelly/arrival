@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ArrowSquareOut,
   ArrowUp,
+  CalendarBlank,
   ChartLineUp,
   Check,
   CheckCircle,
@@ -17,6 +18,7 @@ import {
   Globe,
   Info,
   Key,
+  List,
   ListChecks,
   MagnifyingGlass,
   Path,
@@ -80,6 +82,13 @@ const time = (value: string) =>
   });
 const count = (value: number) =>
   new Intl.NumberFormat('en', { notation: value > 9999 ? 'compact' : 'standard' }).format(value);
+const relative = (value: string, now: string) => {
+  const seconds = Math.max(0, (new Date(now).getTime() - new Date(value).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
 const sourceName = (value: string) =>
   ({
     gateway: 'Demo website',
@@ -164,6 +173,98 @@ function Empty({
       <p>{children}</p>
       {action}
     </div>
+  );
+}
+function RangePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="range-picker" role="group" aria-label="Date range">
+      <CalendarBlank size={15} aria-hidden="true" />
+      {[
+        ['24h', '24h'],
+        ['7d', '7d'],
+        ['all', 'All time'],
+      ].map(([id, label]) => (
+        <button key={id} aria-pressed={value === id} onClick={() => onChange(id)} type="button">
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+function MiniBars({ values, tone = 'accent' }: { values: number[]; tone?: 'accent' | 'ink' }) {
+  const max = Math.max(1, ...values);
+  const shown = values.slice(-14);
+  return (
+    <span className={`mini-bars ${tone}`} aria-hidden="true">
+      {shown.map((value, index) => (
+        <span
+          key={index}
+          style={{ height: `${Math.max(3, (value / max) * 26)}px` }}
+          className={index === shown.length - 1 ? 'latest' : ''}
+        />
+      ))}
+    </span>
+  );
+}
+function RecentVisits({
+  visits,
+  selectVisit,
+  showVisits,
+  now,
+}: {
+  visits: Visit[];
+  selectVisit: (id: string) => void;
+  showVisits: () => void;
+  now: string;
+}) {
+  return (
+    <>
+      <div className="recent-list">
+        {visits.map((visit) => (
+          <button
+            className="recent-row"
+            key={visit.id}
+            onClick={() => selectVisit(visit.id)}
+            aria-label={`Inspect ${visit.agentName}`}
+          >
+            <Avatar visit={visit} />
+            <span className="recent-person">
+              <strong>{visit.agentName}</strong>
+              <small>
+                {visit.attribution
+                  ? `${visit.attribution.provider} · ${visit.attribution.client}`
+                  : visit.isDemo
+                    ? 'Controlled demo'
+                    : sourceName(visit.source)}
+              </small>
+            </span>
+            <span className="recent-intent">
+              <strong className={visit.objective ? '' : 'is-unknown'}>
+                {visit.objective || 'Task unknown'}
+              </strong>
+              <small>
+                {visit.attribution?.referral.source ?? 'No referrer supplied'} ·{' '}
+                {visit.journey?.lastPath ?? visit.entryPath}
+              </small>
+            </span>
+            <Status visit={visit} />
+            <span className="recent-activity">
+              <strong>{count(visit.eventCount)}</strong>
+              <small>events</small>
+            </span>
+            <time dateTime={visit.createdAt} title={date(visit.createdAt)}>
+              {relative(visit.createdAt, now)}
+            </time>
+            <ArrowRight size={15} className="recent-arrow" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <div className="recent-footer">
+        <button className="text-button" onClick={showVisits}>
+          View all visits <ArrowRight size={15} />
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -391,6 +492,27 @@ export default function App() {
     { id: 'integration', name: 'Connect a website', icon: Code },
     { id: 'project', name: 'Built & next', icon: ListChecks },
   ];
+  const navItem = (item: (typeof views)[number]) => (
+    <a
+      key={item.id}
+      href={`${location.pathname}?view=${item.id}`}
+      aria-current={view === item.id ? 'page' : undefined}
+      className={view === item.id ? 'active' : ''}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        setView(item.id);
+        setMobileNav(false);
+        requestAnimationFrame(() => document.getElementById('workspace-main')?.focus());
+      }}
+    >
+      <item.icon size={17} weight={view === item.id ? 'fill' : 'regular'} aria-hidden="true" />
+      {item.name}
+      {item.id === 'sessions' && data.stats.visits > 0 && (
+        <span className="nav-count">{count(data.stats.visits)}</span>
+      )}
+    </a>
+  );
   return (
     <div className="app-shell">
       <a className="skip-link" href="#workspace-main">
@@ -411,9 +533,11 @@ export default function App() {
         className={`sidebar ${mobileNav ? 'mobile-open' : ''}`}
         aria-label="Workspace navigation"
       >
-        <a href="/" aria-label="Arrival home">
-          <Brand />
-        </a>
+        <div className="sidebar-head">
+          <a href="/" aria-label="Arrival home">
+            <Brand light />
+          </a>
+        </div>
         <div className="workspace">
           <span className="workspace-symbol">{data.site.name.slice(0, 1).toUpperCase()}</span>
           <div>
@@ -423,35 +547,18 @@ export default function App() {
         </div>
 
         <nav aria-label="Workspace pages">
-          {views.map((item) => (
-            <a
-              key={item.id}
-              href={`${location.pathname}?view=${item.id}`}
-              aria-current={view === item.id ? 'page' : undefined}
-              className={`${view === item.id ? 'active' : ''} ${item.id === 'project' ? 'secondary-nav' : ''}`}
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-                event.preventDefault();
-                setView(item.id);
-                setMobileNav(false);
-                requestAnimationFrame(() => document.getElementById('workspace-main')?.focus());
-              }}
-            >
-              <item.icon
-                size={19}
-                weight={view === item.id ? 'duotone' : 'regular'}
-                aria-hidden="true"
-              />
-              {item.name}
-              {item.id === 'sessions' && data.stats.visits > 0 && (
-                <span className="nav-count">{count(data.stats.visits)}</span>
-              )}
-            </a>
-          ))}
+          <span className="nav-label">Analyze</span>
+          {views.slice(0, 3).map(navItem)}
+          <span className="nav-label">Configure</span>
+          {views.slice(3, 5).map(navItem)}
+          <span className="nav-label">Product</span>
+          {views.slice(5).map(navItem)}
         </nav>
         <div className="sidebar-note">
-          <span className="observation-dot" />
-          <strong>Observability first</strong>
+          <span className="sidebar-note-title">
+            <span className="observation-dot" />
+            Observation, not assumption
+          </span>
           <p>
             {data.site.entryMode === 'ask'
               ? 'Agents introduce their task, then continue.'
@@ -459,10 +566,10 @@ export default function App() {
           </p>
         </div>
         <a className="sidebar-link" href={data.site.origin} target="_blank" rel="noreferrer">
-          Open website <ArrowSquareOut size={16} />
+          <ArrowSquareOut size={15} /> Open website
         </a>
         <div className="sidebar-bottom">
-          <span className="owner-avatar">You</span>
+          <span className="owner-avatar">{data.site.name.slice(0, 1).toUpperCase()}</span>
           <div>
             <strong>{data.site.workspace ?? data.site.name}</strong>
             <small>Customer workspace</small>
@@ -475,7 +582,7 @@ export default function App() {
               setLogin(true);
             }}
           >
-            <SignOut size={18} />
+            <SignOut size={17} />
           </button>
         </div>
       </aside>
@@ -489,14 +596,12 @@ export default function App() {
             aria-controls="workspace-navigation"
             onClick={() => setMobileNav((v) => !v)}
           >
-            <ListChecks size={22} />
+            <List size={21} />
           </button>
-          <a className="dashboard-home" href="/">
-            arrival.
-          </a>
           <div className="breadcrumb">
+            <span className="crumb-workspace">{data.site.name}</span>
+            <span className="crumb-sep">/</span>
             <strong>{views.find((v) => v.id === view)?.name}</strong>
-            <span>/</span>
             <span className="workspace-domain">{new URL(data.site.origin).hostname}</span>
           </div>
           <div className="topbar-right">
@@ -510,7 +615,7 @@ export default function App() {
               title="Refresh data"
               aria-label="Refresh data"
             >
-              <ArrowClockwise size={18} />
+              <ArrowClockwise size={17} />
             </button>
           </div>
         </header>
@@ -530,25 +635,23 @@ export default function App() {
                 <div className="page-heading">
                   <div>
                     <div className="section-context">Website analytics</div>
-                    <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
+                    <div className="page-title-row">
+                      <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
+                      <span className="live-badge">
+                        <i />
+                        Live
+                      </span>
+                    </div>
                     <p>
                       {view === 'overview'
-                        ? 'A little context for everyone stopping by.'
+                        ? 'Who arrived, what they asked for, and the trail they left behind.'
                         : 'Follow the task behind a visit, from check-in to the final action.'}
                     </p>
                   </div>
                   <div className="heading-actions">
-                    <select
-                      aria-label="Date range"
-                      value={range}
-                      onChange={(e) => setRange(e.target.value)}
-                    >
-                      <option value="24h">Last 24 hours</option>
-                      <option value="7d">Last 7 days</option>
-                      <option value="all">All time</option>
-                    </select>
+                    <RangePicker value={range} onChange={setRange} />
                     <a className="button secondary" href="/api/admin/export?format=csv" download>
-                      <DownloadSimple size={17} />
+                      <DownloadSimple size={16} />
                       Export
                     </a>
                   </div>
@@ -682,88 +785,102 @@ function OverviewPage({
   range: string;
 }) {
   const [geography, setGeography] = useState<'country' | 'region'>('country');
+  const declaredShare = data.stats.visits
+    ? Math.round((data.stats.answered / data.stats.visits) * 100)
+    : 0;
+  const automationShare = data.stats.visits
+    ? Math.round((data.stats.automated / data.stats.visits) * 100)
+    : 0;
+  const eventsPerVisit = data.stats.visits
+    ? (data.stats.events / data.stats.visits).toFixed(1)
+    : '0';
   const stats = [
     {
       label: 'Visits observed',
       value: data.stats.visits,
-      detail: 'Arrivals on your website',
+      detail: 'Selected period',
       icon: Path,
+      visual: <MiniBars values={data.chart.map((point) => point.visits)} />,
     },
     {
       label: 'Purposes declared',
       value: data.stats.answered,
-      detail: 'In the visitor’s own words',
+      detail: `${declaredShare}% shared a task`,
       icon: ListChecks,
+      visual: (
+        <span className="kpi-meter">
+          <i style={{ width: `${declaredShare}%` }} />
+        </span>
+      ),
     },
     {
-      label: 'Suspected automation',
+      label: 'Automation signals',
       value: data.stats.automated,
-      detail: 'From header or browser signals',
-      icon: CheckCircle,
+      detail: `${automationShare}% show signals`,
+      icon: Robot,
+      visual: (
+        <span className="kpi-meter ink">
+          <i style={{ width: `${automationShare}%` }} />
+        </span>
+      ),
     },
     {
       label: 'Events captured',
       value: data.stats.events,
-      detail: 'Requests, context, and actions',
+      detail: `${eventsPerVisit} per visit`,
       icon: Eye,
+      visual: <MiniBars values={data.chart.map((point) => point.events)} tone="ink" />,
     },
   ];
+  const entry = data.entry;
+  const answeredShare =
+    entry && entry.prompted ? Math.round((entry.answered / entry.prompted) * 100) : 0;
   return (
     <>
-      <section className="panel overview-activity">
-        <div className="stats-strip">
-          {stats.map((s) => (
-            <div className="stat" key={s.label}>
-              <div className="stat-label">{s.label}</div>
-              <strong>{count(s.value)}</strong>
-              <small>{s.detail}</small>
+      <section className="kpi-grid" aria-label="Traffic summary">
+        {stats.map((stat) => (
+          <article className="kpi-card" key={stat.label}>
+            <div className="kpi-top">
+              <span className="kpi-label">{stat.label}</span>
+              <span className="kpi-icon">
+                <stat.icon size={15} weight="bold" aria-hidden="true" />
+              </span>
             </div>
-          ))}
-        </div>
-        <ActivityChart points={data.chart} empty={!data.stats.events} />
+            <strong className="kpi-value">{count(stat.value)}</strong>
+            <div className="kpi-foot">
+              <span className="kpi-note">{stat.detail}</span>
+              {stat.visual}
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="panel chart-panel">
+        <ActivityChart
+          points={data.chart}
+          empty={!data.stats.events}
+          compact
+          meta={`${count(data.stats.events)} events · ${count(data.stats.visits)} visits`}
+        />
         {range === 'all' && (
           <p className="chart-range-note">
             The chart shows the latest 7 days. Totals cover all time.
           </p>
         )}
       </section>
-      {data.entry && (
-        <section className="entry-funnel" aria-label="Agent entry funnel">
-          <div>
-            <span>Agent introductions</span>
-            <p>A quick hello. Then back to the task.</p>
-          </div>
-          <ol>
-            <li>
-              <strong>{data.entry.prompted}</strong>
-              <span>Questions shown</span>
-            </li>
-            <li>
-              <strong>{data.entry.answered}</strong>
-              <span>Answered</span>
-            </li>
-            <li>
-              <strong>{data.entry.continued}</strong>
-              <span>Continued browsing</span>
-            </li>
-          </ol>
-          <small>
-            Fetch-only visits read freely. Missing continuation is not proof of abandonment.
-          </small>
-        </section>
-      )}
-      <div className="overview-breakdowns">
+
+      <div className={`overview-triptych ${entry ? 'three' : 'two'}`}>
         <section className="panel source-panel">
           <div className="panel-heading">
             <div>
               <h2>Request clients</h2>
-              <p>Who’s been stopping by</p>
+              <p>Identity claimed in the request</p>
             </div>
             <span className="quiet-count">Visits</span>
           </div>
           {data.sources.length ? (
             <div className="source-list">
-              {data.sources.map((source) => (
+              {data.sources.slice(0, 5).map((source) => (
                 <div className="source-row" key={source.name}>
                   <span
                     className="rank-fill"
@@ -788,8 +905,13 @@ function OverviewPage({
             Names come from headers. Open a visit for provider-range evidence.
           </div>
         </section>
+
         <section className="panel overview-places">
           <div className="panel-heading">
+            <div>
+              <h2>Visitor locations</h2>
+              <p>Approximate connection origin</p>
+            </div>
             <div className="geo-tabs" role="group" aria-label="Overview location breakdown">
               <button
                 aria-pressed={geography === 'country'}
@@ -798,10 +920,9 @@ function OverviewPage({
                 Countries
               </button>
               <button aria-pressed={geography === 'region'} onClick={() => setGeography('region')}>
-                States & regions
+                Regions
               </button>
             </div>
-            <span className="quiet-count">Visits</span>
           </div>
           {(geography === 'country' ? data.network.countries : (data.network.regions ?? []))
             .length ? (
@@ -829,26 +950,95 @@ function OverviewPage({
             <p className="quiet-empty">A small world, once your first visitors arrive.</p>
           )}
           <div className="panel-footnote">
-            <span>Approximate location of the connection.</span>
+            <span>IP geolocation is approximate.</span>
             <button className="text-button" onClick={openOrigins}>
               Explore origins <ArrowRight size={13} />
             </button>
           </div>
         </section>
+
+        {entry && (
+          <section className="panel entry-panel" aria-label="Agent entry funnel">
+            <div className="panel-heading">
+              <div>
+                <h2>Agent introductions</h2>
+                <p>A quick hello, then back to the task</p>
+              </div>
+              <span className="quiet-count">Funnel</span>
+            </div>
+            {entry.prompted ? (
+              <div className="entry-body">
+                <div
+                  className="entry-ring"
+                  style={{
+                    background: `conic-gradient(var(--accent) 0deg ${answeredShare * 3.6}deg, #f1e9ee ${answeredShare * 3.6}deg 360deg)`,
+                  }}
+                >
+                  <div>
+                    <strong>{answeredShare}%</strong>
+                    <span>answered</span>
+                  </div>
+                </div>
+                <ol className="entry-steps">
+                  <li>
+                    <span>Shown</span>
+                    <strong>{count(entry.prompted)}</strong>
+                  </li>
+                  <li>
+                    <span>Answered</span>
+                    <strong>{count(entry.answered)}</strong>
+                  </li>
+                  <li>
+                    <span>Continued</span>
+                    <strong>{count(entry.continued)}</strong>
+                  </li>
+                </ol>
+              </div>
+            ) : (
+              <div className="entry-empty">
+                <span className="entry-empty-icon">
+                  <Eye size={16} />
+                </span>
+                <div>
+                  <strong>
+                    {data.site.entryMode === 'observe'
+                      ? 'Observation only'
+                      : 'No introductions yet'}
+                  </strong>
+                  <p>
+                    {data.site.entryMode === 'observe'
+                      ? 'Entry questions are off. Visits are observed without a prompt.'
+                      : 'Questions are ready. They appear when an interactive agent arrives.'}
+                  </p>
+                </div>
+                <button className="text-button" onClick={editQuestions}>
+                  Configure <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
+            <div className="panel-footnote">
+              <Info size={13} />
+              Fetch-only visits read freely. Missing continuation is not proof of abandonment.
+            </div>
+          </section>
+        )}
       </div>
-      <ContextBreakdowns visits={data.sessions} />
-      <section className="panel visits-panel">
+
+      <section className="panel recent-panel">
         <div className="panel-heading">
           <div>
             <h2>Recent visits</h2>
-            <p>Declared intentions alongside the activity you observed.</p>
+            <p>Declared intent alongside the activity you observed</p>
           </div>
-          <button className="text-button" onClick={showVisits}>
-            View all visits <ArrowRight size={16} />
-          </button>
+          <span className="quiet-count">{count(data.stats.visits)} total</span>
         </div>
         {data.sessions.length ? (
-          <VisitTable visits={data.sessions.slice(0, 5)} selectVisit={selectVisit} />
+          <RecentVisits
+            visits={data.sessions.slice(0, 6)}
+            selectVisit={selectVisit}
+            showVisits={showVisits}
+            now={data.serverTime}
+          />
         ) : (
           <Empty
             title="Your first arrival starts here."
@@ -859,12 +1049,7 @@ function OverviewPage({
                   Connect a website
                 </button>
                 {!data.site.workspace && (
-                  <button
-                    className="button secondary"
-
-                    disabled={demoBusy}
-                    onClick={runDemo}
-                  >
+                  <button className="button secondary" disabled={demoBusy} onClick={runDemo}>
                     <Play size={16} weight="fill" />
                     {demoBusy ? 'Running a real HTTP visit…' : 'Run a demo agent'}
                   </button>
@@ -885,21 +1070,22 @@ function OverviewPage({
           </Empty>
         )}
       </section>
-      <div className="bottom-grid">
+
+      <div className="overview-lower">
         <section className="panel pages-panel">
           <div className="panel-heading">
             <div>
               <h2>Where visitors went</h2>
               <p>Page views on instrumented websites</p>
             </div>
-            <FileText size={19} />
+            <FileText size={18} />
           </div>
           {data.pages.length ? (
             <div className="pages-list">
-              {data.pages.map((page) => (
+              {data.pages.slice(0, 6).map((page) => (
                 <div key={page.path}>
                   <span>
-                    <FileText size={16} />
+                    <FileText size={14} />
                     <code>{page.path}</code>
                   </span>
                   <strong>
@@ -914,35 +1100,32 @@ function OverviewPage({
           )}
         </section>
         <section className="start-panel">
-          <span className="start-symbol">
-            <ListChecks size={24} />
-          </span>
-          <div>
-            <h2>Ask a better first question.</h2>
-            <p>
-              Collect objectives, discovery sources, evaluation criteria, and your own custom
-              questions.
-            </p>
-            <button className="text-button" onClick={editQuestions}>
-              Edit check-in questions <ArrowRight size={16} />
-            </button>
+          <div className="start-top">
+            <span className="start-symbol">
+              <ListChecks size={21} />
+            </span>
+            <span className="start-meta">{data.site.questions.length} questions live</span>
           </div>
+          <h2>Ask a better first question.</h2>
+          <p>
+            Collect objectives, discovery sources, evaluation criteria, and your own custom
+            questions.
+          </p>
+          <button className="text-button" onClick={editQuestions}>
+            Edit check-in questions <ArrowRight size={15} />
+          </button>
         </section>
       </div>
+
+      <ContextBreakdowns visits={data.sessions} />
+
       {data.sessions.length > 0 && !data.site.workspace && (
         <div className="demo-control">
           <span>Want another complete example?</span>
-          {!data.site.workspace && (
-            <button
-              className="text-button"
-
-              disabled={demoBusy}
-              onClick={runDemo}
-            >
-              <Play size={14} />
-              {demoBusy ? 'Running…' : 'Run a controlled HTTP agent'}
-            </button>
-          )}
+          <button className="text-button" disabled={demoBusy} onClick={runDemo}>
+            <Play size={14} />
+            {demoBusy ? 'Running…' : 'Run a controlled HTTP agent'}
+          </button>
         </div>
       )}
     </>

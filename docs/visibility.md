@@ -16,8 +16,8 @@ Search crawlers often discover pages through links, sitemaps or earlier crawls, 
 
 ## Scope and operation
 
-`GET /api/admin/visibility` and `/api/admin/visibility/export` use the authenticated workspace. Filters: range, kind, provider, client, source, query, page, search and includeDemo. Activity pages contain 50 visits; offset selects the next page. CSV exports all matching records within the report ceiling.
+`GET /api/admin/visibility` and `/api/admin/visibility/export` use the authenticated workspace. Filters: range, kind, provider, client, source, query, page, search and includeDemo. Activity pages contain 15 visits; offset selects the next page. CSV exports all matching records within the report ceiling.
 
-Reports scan the latest 5,000 visits in the selected date range and flag the ceiling when reached. Each visit includes up to 100 distinct recorded page paths, plus its entry and latest path. Ranked tables show up to 50 clients/sources or 100 queries/pages. Page events count request/page-view events, not unique people or conversions. Demo visits are excluded by default. Existing history is enriched on read without rewriting declarations.
+Reports scan the latest 5,000 visits in the selected date range and flag the ceiling when reached. Each visit includes up to 100 distinct recorded page paths, plus its entry and latest path. Ranked tables show up to 50 clients/sources or 100 queries/pages, and client rows are grouped by provider, client and visitor type. Page events count request/page-view events, not unique people or conversions. Demo visits are excluded by default. Existing history is enriched on read without rewriting declarations.
 
 The standard client installation is unchanged. No additional Whiteye-specific code is needed. Collection does not depend on the visibility report or its identity-feed refresh; content remains available under the existing observation policy.

@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   ArrowClockwise,
+  Bug,
+  Eye,
   MagnifyingGlass,
+  Robot,
   X,
   Info,
   DownloadSimple,
@@ -87,7 +90,46 @@ export function DiscoveryTrail({ visit }: { visit: Visit }) {
   );
 }
 const n = (value: number) => value.toLocaleString();
+const PAGE_SIZE = 15;
+const visitWord = (value: number) => (value === 1 ? 'visit' : 'visits');
+const agentWord = (value: number) => (value === 1 ? 'agent' : 'agents');
+const crawlerWord = (value: number) => (value === 1 ? 'crawler' : 'crawlers');
 const percent = (a: number, b: number) => `${b ? Math.round((a / b) * 100) : 0}%`;
+const roleSummary = (role: string) => {
+  if (!role) return 'Role not published';
+  if (/user-requested retrieval/i.test(role)) return 'User-requested retrieval';
+  if (/seo analysis/i.test(role)) return 'SEO analysis';
+  if (/web crawling/i.test(role)) return 'Web crawling';
+  if (/self-reported/i.test(role)) return 'Self-reported introduction';
+  if (/automation|http-client/i.test(role)) return 'HTTP client / automation';
+  return role;
+};
+type ClientGroup = {
+  provider: string;
+  client: string;
+  kind: TrafficType;
+  role: string;
+  visits: number;
+  requests: number;
+  pages: number;
+  latest: string;
+};
+const groupedClients = (providers: VisibilityReport['providers'], kind: TrafficType) => {
+  const groups = new Map<string, ClientGroup>();
+  for (const item of providers) {
+    if (item.kind !== kind) continue;
+    const key = `${item.provider}|${item.client}`;
+    const current = groups.get(key);
+    if (current) {
+      current.visits += item.visits;
+      current.requests += item.requests;
+      current.pages = Math.max(current.pages, item.pages);
+    } else {
+      groups.set(key, { ...item });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.visits - a.visits);
+};
 type Tab = 'activity' | 'crawlers' | 'queries' | 'pages' | 'sources';
 export default function Visibility({
   range,
@@ -155,6 +197,28 @@ export default function Visibility({
     if (key !== 'offset' && value !== undefined && value !== '')
       exportParams.set(key, String(value));
   }
+  const composition = [
+    { kind: 'crawler' as const, label: 'Crawlers', value: report?.totals.crawlers ?? 0 },
+    { kind: 'agent' as const, label: 'Agents', value: report?.totals.agents ?? 0 },
+    {
+      kind: 'automation' as const,
+      label: 'Other automation',
+      value: report?.totals.automation ?? 0,
+    },
+    {
+      kind: 'unidentified' as const,
+      label: 'Unclassified',
+      value: report?.totals.unidentified ?? 0,
+    },
+  ];
+  const topPages = report?.pages.slice(0, 6) ?? [];
+  const pageMaximum = Math.max(1, ...topPages.map((page) => page.visits));
+  const directSource = report?.sources.find((source) => source.kind === 'unavailable');
+  const referredSources =
+    report?.sources.filter((source) => source.kind !== 'unavailable').slice(0, 5) ?? [];
+  const sourceMaximum = Math.max(1, ...referredSources.map((source) => source.visits));
+  const crawlerClients = report ? groupedClients(report.providers, 'crawler') : [];
+  const agentClients = report ? groupedClients(report.providers, 'agent') : [];
   return (
     <div className="visibility-view" aria-busy={busy}>
       <div className="visibility-toolbar">
@@ -250,63 +314,388 @@ export default function Visibility({
       ) : (
         report && (
           <>
-            <section className="visibility-metrics" aria-label="Visibility summary">
+            <section className="kpi-grid vis-kpi-grid" aria-label="Visibility summary">
               {[
                 {
-                  name: 'Crawler visits',
+                  key: 'visits',
+                  label: 'Visits observed',
+                  value: total!.visits,
+                  detail: `${n(total!.requests)} page events · ${n(total!.withDeclaration)} stated goals`,
+                  icon: Eye,
+                  action: () => {
+                    update({ kind: undefined });
+                    setTab('activity');
+                  },
+                  visual: (
+                    <span className="vis-mini-stack" aria-hidden="true">
+                      {composition
+                        .filter((segment) => segment.value > 0)
+                        .map((segment) => (
+                          <i
+                            key={segment.kind}
+                            className={segment.kind}
+                            style={{ flexGrow: segment.value }}
+                          />
+                        ))}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'crawlers',
+                  label: 'Crawler visits',
                   value: total!.crawlers,
-                  detail: 'Indexing, training and SEO',
-                  kind: 'crawler',
+                  detail: `${percent(total!.crawlers, total!.visits)} · indexing, training, SEO`,
+                  icon: Bug,
+                  action: () => drill({ kind: 'crawler' }),
+                  visual: (
+                    <span className="vis-kpi-meter" aria-hidden="true">
+                      <i
+                        className="crawler"
+                        style={{
+                          width: `${total!.crawlers ? Math.max(2, (total!.crawlers / Math.max(1, total!.visits)) * 100) : 0}%`,
+                        }}
+                      />
+                    </span>
+                  ),
                 },
                 {
-                  name: 'Agent visits',
+                  key: 'agents',
+                  label: 'Agent visits',
                   value: total!.agents,
-                  detail: 'User-directed retrieval and declarations',
-                  kind: 'agent',
+                  detail: `${percent(total!.agents, total!.visits)} · user-directed retrieval`,
+                  icon: Robot,
+                  action: () => drill({ kind: 'agent' }),
+                  visual: (
+                    <span className="vis-kpi-meter" aria-hidden="true">
+                      <i
+                        className="agent"
+                        style={{
+                          width: `${total!.agents ? Math.max(2, (total!.agents / Math.max(1, total!.visits)) * 100) : 0}%`,
+                        }}
+                      />
+                    </span>
+                  ),
                 },
                 {
-                  name: 'Search queries supplied',
+                  key: 'queries',
+                  label: 'Queries supplied',
                   value: total!.withQuery,
-                  detail: `${percent(total!.withQuery, total!.visits)} of filtered visits`,
-                  view: 'queries',
-                },
-                {
-                  name: 'Visits with a source',
-                  value: total!.withSource,
-                  detail: `${percent(total!.withSource, total!.visits)} referral coverage`,
-                  view: 'sources',
+                  detail: `${percent(total!.withQuery, total!.visits)} disclosed a search query`,
+                  icon: MagnifyingGlass,
+                  action: () => setTab('queries'),
+                  visual: (
+                    <span className="vis-kpi-meter" aria-hidden="true">
+                      <i
+                        style={{
+                          width: `${total!.withQuery ? Math.max(2, (total!.withQuery / Math.max(1, total!.visits)) * 100) : 0}%`,
+                        }}
+                      />
+                    </span>
+                  ),
                 },
               ].map((item) => (
                 <button
-                  key={item.name}
-                  onClick={() =>
-                    item.kind ? drill({ kind: item.kind as TrafficType }) : setTab(item.view as Tab)
-                  }
+                  type="button"
+                  className="kpi-card vis-kpi"
+                  key={item.key}
+                  onClick={item.action}
                 >
-                  <span>
-                    {item.name}
-                    <ArrowRight size={13} />
+                  <span className="kpi-top">
+                    <span className="kpi-label">{item.label}</span>
+                    <span className="kpi-icon">
+                      <item.icon size={15} weight="bold" aria-hidden="true" />
+                    </span>
                   </span>
-                  <strong>{n(item.value)}</strong>
-                  <small>{item.detail}</small>
+                  <strong className="kpi-value">{n(item.value)}</strong>
+                  <span className="kpi-foot">
+                    <span className="kpi-note">{item.detail}</span>
+                    {item.visual}
+                  </span>
                 </button>
               ))}
             </section>
-            <div className="visibility-coverage">
-              <div>
-                <Info size={16} />
-                <p>
-                  <strong>{n(total!.visits)} visits in this view.</strong> {n(total!.automation)}{' '}
-                  other automation · {n(total!.unidentified)} unclassified ·{' '}
-                  {n(total!.withDeclaration)} stated goals.
-                </p>
-              </div>
+
+            <div className="vis-context">
               <span>
+                <strong>{n(total!.visits)}</strong> {visitWord(total!.visits)}
+              </span>
+              <span>
+                <strong>{n(total!.requests)}</strong> page events
+              </span>
+              <span>
+                <strong>{n(total!.withDeclaration)}</strong> stated goals
+              </span>
+              <span>
+                <strong>{n(total!.withSource)}</strong> with a referrer
+              </span>
+              <span className="vis-context-right">
                 {report.scope.includeDemo
                   ? 'Demo traffic included'
-                  : `${report.scope.excludedDemos} demos excluded`}
+                  : `${n(report.scope.excludedDemos)} demos excluded`}
               </span>
             </div>
+
+            {total!.withQuery === 0 && (
+              <div className="vis-query-note" role="note">
+                <Info size={15} />
+                <p>
+                  <strong>No search query was disclosed in this period.</strong> Crawlers and fetch
+                  clients usually omit a referrer. Pages and referral sources still show where
+                  attention came from.
+                </p>
+                <button type="button" className="text-button" onClick={() => setTab('queries')}>
+                  Open queries <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
+
+            <div className="vis-insight-grid">
+              <section className="panel vis-mix-panel" aria-labelledby="vis-mix-title">
+                <div className="vis-panel-head">
+                  <div>
+                    <h2 id="vis-mix-title">Visitor mix</h2>
+                    <p>Known crawlers, agents and the unclassified remainder</p>
+                  </div>
+                  <span className="quiet-count">
+                    {n(total!.visits)} {visitWord(total!.visits)}
+                  </span>
+                </div>
+                <div
+                  className="vis-mix-bar"
+                  role="img"
+                  aria-label={composition
+                    .map((segment) => `${segment.label}: ${segment.value}`)
+                    .join(', ')}
+                >
+                  {composition
+                    .filter((segment) => segment.value > 0)
+                    .map((segment) => (
+                      <span
+                        key={segment.kind}
+                        className={`vis-mix-segment ${segment.kind}`}
+                        style={{ flexGrow: segment.value }}
+                        title={`${segment.label}: ${segment.value}`}
+                      />
+                    ))}
+                </div>
+                <ul className="vis-mix-legend">
+                  {composition.map((segment) => (
+                    <li key={segment.kind}>
+                      <button type="button" onClick={() => drill({ kind: segment.kind })}>
+                        <i className={`vis-dot ${segment.kind}`} />
+                        <span>{segment.label}</span>
+                        <strong>{n(segment.value)}</strong>
+                        <small>{percent(segment.value, total!.visits)}</small>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="vis-panel-note">
+                  <Info size={13} />
+                  Labels use published roles and request evidence. “Unclassified” is not proof of a
+                  human.
+                </p>
+              </section>
+
+              <section className="panel vis-pages-panel" aria-labelledby="vis-pages-title">
+                <div className="vis-panel-head">
+                  <div>
+                    <h2 id="vis-pages-title">Pages attracting attention</h2>
+                    <p>Distinct visits recorded per path</p>
+                  </div>
+                  <button type="button" className="text-button" onClick={() => setTab('pages')}>
+                    All pages <ArrowRight size={13} />
+                  </button>
+                </div>
+                {topPages.length ? (
+                  <div className="vis-rank-list">
+                    {topPages.map((page) => (
+                      <button
+                        type="button"
+                        className="vis-rank-row"
+                        key={page.path}
+                        onClick={() => drill({ page: page.path })}
+                      >
+                        <span className="vis-rank-label">
+                          <code title={page.path}>{page.path}</code>
+                          <small>
+                            {n(page.agents)} {agentWord(page.agents)} · {n(page.crawlers)}{' '}
+                            {crawlerWord(page.crawlers)}
+                          </small>
+                        </span>
+                        <strong>{n(page.visits)}</strong>
+                        <span className="vis-rank-track" aria-hidden="true">
+                          <i style={{ width: `${(page.visits / pageMaximum) * 100}%` }} />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="vis-panel-empty">
+                    Page views appear once visitors browse the site.
+                  </p>
+                )}
+                <p className="vis-panel-note">
+                  One visit can touch several paths. Open a page to see its visitors.
+                </p>
+              </section>
+
+              <section className="panel vis-sources-panel" aria-labelledby="vis-sources-title">
+                <div className="vis-panel-head">
+                  <div>
+                    <h2 id="vis-sources-title">Where visits came from</h2>
+                    <p>Referral evidence supplied with requests</p>
+                  </div>
+                  <button type="button" className="text-button" onClick={() => setTab('sources')}>
+                    All sources <ArrowRight size={13} />
+                  </button>
+                </div>
+                {directSource && (
+                  <div className="vis-direct-source">
+                    <div>
+                      <span>Direct or undisclosed</span>
+                      <strong>{n(directSource.visits)}</strong>
+                    </div>
+                    <span className="vis-rank-track" aria-hidden="true">
+                      <i style={{ width: `${percent(directSource.visits, total!.visits)}` }} />
+                    </span>
+                    <small>
+                      {percent(directSource.visits, total!.visits)} of visits supplied no referrer
+                    </small>
+                  </div>
+                )}
+                {referredSources.length ? (
+                  <div className="vis-rank-list referred">
+                    {referredSources.map((source) => (
+                      <button
+                        type="button"
+                        className="vis-rank-row"
+                        key={source.source}
+                        onClick={() => drill({ source: source.source })}
+                      >
+                        <span className="vis-rank-label">
+                          <span title={source.source}>{source.source}</span>
+                          <small>
+                            {source.kind === 'AI referral' ? 'AI referral' : 'Referring site'}
+                          </small>
+                        </span>
+                        <strong>{n(source.visits)}</strong>
+                        <span className="vis-rank-track" aria-hidden="true">
+                          <i style={{ width: `${(source.visits / sourceMaximum) * 100}%` }} />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="vis-panel-empty">
+                    No identifying referrer was supplied in this period.
+                  </p>
+                )}
+                <p className="vis-panel-note">
+                  Referral text is separate from the connection’s network and location.
+                </p>
+              </section>
+            </div>
+
+            <section className="panel vis-clients-panel" aria-labelledby="vis-clients-title">
+              <div className="vis-panel-head">
+                <div>
+                  <h2 id="vis-clients-title">Recognized visitors</h2>
+                  <p>Published roles and observed activity, not private prompts</p>
+                </div>
+                <button type="button" className="text-button" onClick={() => setTab('crawlers')}>
+                  All crawlers & agents <ArrowRight size={13} />
+                </button>
+              </div>
+              <div className="vis-client-groups">
+                <div className="vis-client-group">
+                  <div className="vis-client-group-head">
+                    <i className="vis-dot crawler" />
+                    <h3>Crawlers</h3>
+                    <span>
+                      {n(total!.crawlers)} {visitWord(total!.crawlers)}
+                    </span>
+                  </div>
+                  {crawlerClients.length ? (
+                    crawlerClients.slice(0, 3).map((client) => (
+                      <button
+                        type="button"
+                        className="vis-client-row"
+                        key={`${client.provider}-${client.client}`}
+                        onClick={() =>
+                          drill({
+                            provider: client.provider,
+                            client: client.client,
+                            kind: client.kind,
+                          })
+                        }
+                      >
+                        <ClientMark name={client.client} />
+                        <span className="vis-client-main">
+                          <strong>{client.client}</strong>
+                          <small>
+                            {client.provider} · {roleSummary(client.role)}
+                          </small>
+                          <small>
+                            {n(client.requests)} events · {n(client.pages)} paths
+                          </small>
+                        </span>
+                        <span className="vis-client-count">
+                          <strong>{n(client.visits)}</strong>
+                          <small>{client.visits === 1 ? 'visit' : 'visits'}</small>
+                        </span>
+                        <ArrowRight size={14} />
+                      </button>
+                    ))
+                  ) : (
+                    <p className="vis-panel-empty">No published crawler visited this period.</p>
+                  )}
+                </div>
+                <div className="vis-client-group">
+                  <div className="vis-client-group-head">
+                    <i className="vis-dot agent" />
+                    <h3>Agents</h3>
+                    <span>
+                      {n(total!.agents)} {visitWord(total!.agents)}
+                    </span>
+                  </div>
+                  {agentClients.length ? (
+                    agentClients.slice(0, 3).map((client) => (
+                      <button
+                        type="button"
+                        className="vis-client-row"
+                        key={`${client.provider}-${client.client}`}
+                        onClick={() =>
+                          drill({
+                            provider: client.provider,
+                            client: client.client,
+                            kind: client.kind,
+                          })
+                        }
+                      >
+                        <ClientMark name={client.client} />
+                        <span className="vis-client-main">
+                          <strong>{client.client}</strong>
+                          <small>
+                            {client.provider} · {roleSummary(client.role)}
+                          </small>
+                          <small>
+                            {n(client.requests)} events · {n(client.pages)} paths
+                          </small>
+                        </span>
+                        <span className="vis-client-count">
+                          <strong>{n(client.visits)}</strong>
+                          <small>{client.visits === 1 ? 'visit' : 'visits'}</small>
+                        </span>
+                        <ArrowRight size={14} />
+                      </button>
+                    ))
+                  ) : (
+                    <p className="vis-panel-empty">No user-directed agent visited this period.</p>
+                  )}
+                </div>
+              </div>
+            </section>
             <section className="visibility-report panel">
               <div
                 className="visibility-report-tabs"
@@ -431,10 +820,16 @@ export default function Visibility({
                                 </small>
                               </td>
                               <td>
-                                <code>{r.entryPath}</code>
-                                <span className="journey-connector">↓</span>
-                                <code>{r.lastPath}</code>
-                                <small>{r.tags.slice(0, 2).join(' · ')}</small>
+                                <code title={r.entryPath}>{r.entryPath}</code>
+                                {r.lastPath !== r.entryPath && (
+                                  <>
+                                    <span className="journey-connector">↓</span>
+                                    <code title={r.lastPath}>{r.lastPath}</code>
+                                  </>
+                                )}
+                                {r.tags.length > 0 && (
+                                  <small>{r.tags.slice(0, 2).join(' · ')}</small>
+                                )}
                               </td>
                               <td>
                                 {n(r.requests)}
@@ -686,7 +1081,7 @@ export default function Visibility({
               <footer className="visibility-report-footer">
                 <span>
                   {tab === 'activity'
-                    ? `${report.records.length ? report.offset + 1 : 0}–${report.offset + report.records.length} of ${n(total!.visits)} visits`
+                    ? `${report.records.length ? report.offset + 1 : 0}–${report.offset + report.records.length} of ${n(total!.visits)} ${visitWord(total!.visits)}`
                     : 'Click a row action to inspect its contributing visits.'}
                 </span>
                 {tab === 'activity' && (
@@ -695,7 +1090,10 @@ export default function Visibility({
                       className="button secondary small"
                       disabled={!report.offset || busy}
                       onClick={() =>
-                        setFilters((f) => ({ ...f, offset: Math.max(0, report.offset - 50) }))
+                        setFilters((f) => ({
+                          ...f,
+                          offset: Math.max(0, report.offset - PAGE_SIZE),
+                        }))
                       }
                     >
                       Previous
@@ -703,7 +1101,9 @@ export default function Visibility({
                     <button
                       className="button secondary small"
                       disabled={!report.hasMore || busy}
-                      onClick={() => setFilters((f) => ({ ...f, offset: report.offset + 50 }))}
+                      onClick={() =>
+                        setFilters((f) => ({ ...f, offset: report.offset + PAGE_SIZE }))
+                      }
                     >
                       Next
                     </button>

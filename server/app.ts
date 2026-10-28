@@ -617,7 +617,7 @@ export async function createApp(
       store,
       since,
       { ...filters, ...(exporting ? { offset: 0 } : {}), includeDemo: includeDemo === 'true' },
-      exporting ? 5000 : 50,
+      exporting ? 5000 : 15,
     );
     if (exporting) {
       const cell = (value: unknown) => {

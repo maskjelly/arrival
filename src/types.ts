@@ -199,6 +199,7 @@ export type Overview = {
 export type VisitVisibility = {
   kind: TrafficType;
   kindBasis: string;
+  role: string;
   source: string;
   sourceKind: string;
   query?: string;

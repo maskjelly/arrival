@@ -51,6 +51,7 @@ export function visitVisibility(
   return {
     kind,
     kindBasis: a?.trafficTypeBasis ?? 'No supported client or automation evidence.',
+    role: a?.role ?? '',
     source: a?.referral.source ?? 'No referrer supplied',
     sourceKind: a?.referral.kind ?? 'unavailable',
     query,
@@ -197,17 +198,12 @@ export async function visibilityReport(
     if (r.query) totals.withQuery++;
     if (r.reasonBasis === 'declared') totals.withDeclaration++;
     totals.requests += r.requests;
-    const key = JSON.stringify([
-      r.provider,
-      r.client,
-      r.kind,
-      r.reasonBasis === 'published role' ? r.reason : '',
-    ]);
+    const key = JSON.stringify([r.provider, r.client, r.kind]);
     const provider = providers.get(key) ?? {
       provider: r.provider,
       client: r.client,
       kind: r.kind,
-      role: r.kindBasis,
+      role: r.role || r.kindBasis,
       visits: 0,
       requests: 0,
       pages: new Set<string>(),

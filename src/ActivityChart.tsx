@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ClientMark } from './ClientMark.tsx';
 import type { Overview } from './types.ts';
 import './analytics.css';
@@ -14,6 +14,13 @@ export function ActivityChart({
   empty?: boolean;
   compact?: boolean;
 }) {
+  const [small, setSmall] = useState(() => matchMedia('(max-width:650px)').matches);
+  useEffect(() => {
+    const media = matchMedia('(max-width:650px)');
+    const update = () => setSmall(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const id = useId().replace(/:/g, ''),
     [client, setClient] = useState(''),
     [active, setActive] = useState<number | null>(null);
@@ -26,8 +33,8 @@ export function ActivityChart({
     ...p,
     ...(selected ? (p.clients?.[selected] ?? { visits: 0, events: 0 }) : {}),
   }));
-  const width = 1000,
-    height = compact ? 235 : 300,
+  const width = small ? 360 : 1000,
+    height = small ? 200 : compact ? 235 : 300,
     left = 36,
     right = 18,
     top = 22,
@@ -155,7 +162,9 @@ export function ActivityChart({
           )}
           {chart.map(
             (p, i) =>
-              (i === 0 || i === chart.length - 1 || i % Math.ceil(chart.length / 5) === 0) && (
+              (i === 0 ||
+                i === chart.length - 1 ||
+                i % Math.ceil(chart.length / (small ? 3 : 5)) === 0) && (
                 <text
                   key={p.time}
                   x={x(i)}

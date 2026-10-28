@@ -582,4 +582,11 @@ test('reference-style charts filter clients and expose real bucket values by key
   );
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const chartBox = page.locator('.activity-plot > svg');
+  await expect(chartBox).toHaveAttribute('viewBox', '0 0 360 200');
+  await page.getByRole('slider', { name: 'Inspect time bucket' }).focus();
+  await page.keyboard.press('End');
+  const tip = await page.getByRole('status').boundingBox();
+  expect(tip!.x).toBeGreaterThanOrEqual(0);
+  expect(tip!.x + tip!.width).toBeLessThanOrEqual(390);
 });

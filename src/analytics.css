@@ -69,7 +69,7 @@
   padding: 15px 18px 0;
   min-width: 0;
 }
-.activity-plot svg {
+.activity-plot > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -204,7 +204,7 @@
   .activity-plot {
     padding: 20px 10px 0;
   }
-  .activity-plot svg {
+  .activity-plot > svg {
     min-height: 160px;
   }
   .activity-footer {
@@ -902,4 +902,18 @@
 }
 .login-panel .brand {
   font-weight: 400;
+}
+
+@media (max-width: 650px) {
+  .activity-tooltip {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    top: 8px;
+  }
+  .activity-plot > svg {
+    min-height: 0;
+  }
+  .activity-footer > label {
+    min-height: 26px;
+  }
 }

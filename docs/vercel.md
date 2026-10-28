@@ -30,7 +30,7 @@ In Arrival, set the site name to **Whiteye** and origin to **https://whiteye.in*
 - `NEXT_PUBLIC_ARRIVAL_URL=https://arrival-iota.vercel.app`
 - `ARRIVAL_INGEST_KEY`: the private key, as a sensitive server secret
 
-Redeploy the website so its static HTML includes the script and manifest link. `components/arrival.tsx` loads the browser tracker; `middleware.ts` reports HTTP page arrivals in the background with a one-hour opaque session cookie. It uses Vercel's IP helper only on that platform, skips prefetches, strips query strings and leaves final response status unknown. The HTTP middleware covers chatbots that do not execute JavaScript.
+Redeploy the website so its static HTML includes the script and manifest link. `components/arrival.tsx` loads the browser tracker; `middleware.ts` reports HTTP page arrivals in the background with a one-hour opaque session cookie. It uses Vercel's IP helper only on that platform, skips prefetches, strips query strings and leaves final response status unknown. The HTTP middleware covers chatbots that do not execute JavaScript. The initial browser collector request allows ten seconds for cold starts and IP-reader initialization; it runs in the background and never delays website access.
 
 ## Verify the deployment
 

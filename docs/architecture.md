@@ -19,7 +19,7 @@ flowchart LR
 
 A public script and site ID install without a package or private key. The optional static manifest link exposes question discovery in the original HTML. `public/tracker.js` reports page views, bounded environment hints, scroll milestones, visibility and explicitly annotated clicks. It observes pathname changes through browser history, skips query-only changes, prevents duplicate initialization and resumes the server-issued visit token from per-tab session storage.
 
-Suspected automation can see a collapsed, nonmodal prompt. It never takes focus, hides content or changes website authorization. Dismissal persists for the tab; answered visits are not prompted again. Required question fields only constrain voluntary submissions. `window.arrival` exposes readiness, explicit check-in, answers, annotated actions and a per-page disable switch. Requests time out after four seconds; reporting errors are contained.
+Suspected automation can see a collapsed, nonmodal prompt. It never takes focus, hides content or changes website authorization. Dismissal persists for the tab; answered visits are not prompted again. Required question fields only constrain voluntary submissions. `window.arrival` exposes readiness, explicit check-in, answers, annotated actions and a per-page disable switch. The initial browser session allows ten seconds for a hosted cold start; subsequent reports time out after four seconds. Reporting errors are contained.
 
 The browser endpoint accepts the site's configured exact origin and the collector's own origin for its hosted optional questionnaire. CORS and a public token are abuse-reduction mechanisms, not cryptographic caller verification. An HTTP client can forge public telemetry.
 

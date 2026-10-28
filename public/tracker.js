@@ -79,7 +79,8 @@
         body: JSON.stringify(payload),
         keepalive: true,
         credentials: external ? 'omit' : 'same-origin',
-        signal: AbortSignal.timeout(4000),
+        // The first hosted request may initialize the function and local IP readers.
+        signal: AbortSignal.timeout(payload.type === 'start' ? 10000 : 4000),
       });
       const data = await response.json().catch(() => ({}));
       return response.ok ? data : { error: data.error || 'Could not save this response.' };

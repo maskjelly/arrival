@@ -28,6 +28,8 @@ import {
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
+import { ActivityChart } from './ActivityChart.tsx';
+import { ClientMark } from './ClientMark.tsx';
 import { CustomerSetup } from './CustomerSetup.tsx';
 import BuildStatus from './BuildStatus.tsx';
 import InstallGuide from './InstallGuide.tsx';
@@ -138,7 +140,7 @@ function Status({ visit }: { visit: Visit }) {
 function Avatar({ visit }: { visit: Visit }) {
   return (
     <span className={`avatar ${visit.isDemo ? 'demo-avatar' : ''}`}>
-      {visit.classification === 'unknown' ? <Globe size={20} /> : <Robot size={21} />}
+      <ClientMark name={visit.agentName} size={20} />
     </span>
   );
 }
@@ -320,7 +322,7 @@ export default function App() {
       <div className="login-screen">
         <div className="login-panel">
           <Brand />
-          <h1>Your agent intelligence workspace.</h1>
+          <h1>Good to see you again.</h1>
           <p>
             {workspaceSlug
               ? `Your ${workspaceSlug} workspace. Enter the password you chose during setup.`
@@ -528,7 +530,7 @@ export default function App() {
                   <h1>{view === 'overview' ? 'Agent traffic' : 'Visit explorer'}</h1>
                   <p>
                     {view === 'overview'
-                      ? 'Requests, declared objectives, and activity on your website.'
+                      ? 'A little context for everyone stopping by.'
                       : 'Follow the task behind a visit, from check-in to the final action.'}
                   </p>
                 </div>
@@ -675,23 +677,24 @@ function OverviewPage({
   showVisits: () => void;
   range: string;
 }) {
+  const [geography, setGeography] = useState<'country' | 'region'>('country');
   const stats = [
     {
       label: 'Visits observed',
       value: data.stats.visits,
-      detail: `${data.stats.demo} controlled demo${data.stats.demo === 1 ? '' : 's'}`,
+      detail: 'Arrivals on your website',
       icon: Path,
     },
     {
       label: 'Purposes declared',
       value: data.stats.answered,
-      detail: 'Answers supplied at check-in',
+      detail: 'In the visitor’s own words',
       icon: ListChecks,
     },
     {
       label: 'Suspected automation',
       value: data.stats.automated,
-      detail: 'Header or browser signals; unverified',
+      detail: 'From header or browser signals',
       icon: CheckCircle,
     },
     {
@@ -703,23 +706,28 @@ function OverviewPage({
   ];
   return (
     <>
-      <div className="stats-strip">
-        {stats.map((s) => (
-          <div className="stat" key={s.label}>
-            <div className="stat-label">
-              {s.label}
-              <s.icon size={17} />
+      <section className="panel overview-activity">
+        <div className="stats-strip">
+          {stats.map((s) => (
+            <div className="stat" key={s.label}>
+              <div className="stat-label">{s.label}</div>
+              <strong>{count(s.value)}</strong>
+              <small>{s.detail}</small>
             </div>
-            <strong>{count(s.value)}</strong>
-            <small>{s.detail}</small>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+        <ActivityChart points={data.chart} empty={!data.stats.events} />
+        {range === 'all' && (
+          <p className="chart-range-note">
+            The chart shows the latest 7 days. Totals cover all time.
+          </p>
+        )}
+      </section>
       {data.entry && (
         <section className="entry-funnel" aria-label="Agent entry funnel">
           <div>
             <span>Agent introductions</span>
-            <p>What happened after agents reached your question layer</p>
+            <p>A quick hello. Then back to the task.</p>
           </div>
           <ol>
             <li>
@@ -736,68 +744,88 @@ function OverviewPage({
             </li>
           </ol>
           <small>
-            No continuation observed does not prove abandonment. Responses and network evidence
-            remain separate.
+            Fetch-only visits read freely. Missing continuation is not proof of abandonment.
           </small>
         </section>
       )}
-      <div className="analytics-grid">
-        <section className="panel traffic-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Traffic over time</h2>
-              <p>
-                {range === 'all' ? 'Last 7 days of activity' : 'Arrivals and recorded activity'}
-              </p>
-            </div>
-            <div className="legend">
-              <span>
-                <i className="legend-line teal" />
-                Events
-              </span>
-              <span>
-                <i className="legend-line pale" />
-                Visits
-              </span>
-            </div>
-          </div>
-          <TrafficChart points={data.chart} empty={!data.stats.events} />
-        </section>
+      <div className="overview-breakdowns">
         <section className="panel source-panel">
           <div className="panel-heading">
             <div>
               <h2>Request clients</h2>
-              <p>Names inferred from request headers</p>
+              <p>Who’s been stopping by</p>
             </div>
-            <Globe size={19} />
+            <span className="quiet-count">Visits</span>
           </div>
           {data.sources.length ? (
             <div className="source-list">
-              {data.sources.map((source, index) => (
+              {data.sources.map((source) => (
                 <div className="source-row" key={source.name}>
-                  <span className={`source-icon color-${index}`}>
-                    <Robot size={18} />
-                  </span>
-                  <div>
-                    <strong>{source.name}</strong>
-                    <small>Unverified identity</small>
-                  </div>
-                  <b>{source.count}</b>
+                  <span
+                    className="rank-fill"
+                    style={{ width: `${(source.count / Math.max(1, data.stats.visits)) * 100}%` }}
+                  />
+                  <ClientMark name={source.name} />
+                  <strong>{source.name}</strong>
+                  <b>{count(source.count)}</b>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="small-empty">
-              <Globe size={29} />
-              <p>Client names appear after your first visit.</p>
-            </div>
+            <p className="quiet-empty">
+              Your visitors will introduce themselves here. When they can.
+            </p>
           )}
           <div className="panel-footnote">
-            <Info size={14} />A request header can be impersonated.
+            <Info size={13} />
+            Names come from headers, not verified identities.
+          </div>
+        </section>
+        <section className="panel overview-places">
+          <div className="panel-heading">
+            <div className="geo-tabs" role="group" aria-label="Overview location breakdown">
+              <button
+                aria-pressed={geography === 'country'}
+                onClick={() => setGeography('country')}
+              >
+                Countries
+              </button>
+              <button aria-pressed={geography === 'region'} onClick={() => setGeography('region')}>
+                States & regions
+              </button>
+            </div>
+            <span className="quiet-count">Visits</span>
+          </div>
+          {(geography === 'country' ? data.network.countries : (data.network.regions ?? []))
+            .length ? (
+            <div className="overview-location-list">
+              {(geography === 'country' ? data.network.countries : (data.network.regions ?? []))
+                .slice(0, 5)
+                .map((place, i) => (
+                  <div key={place.name + String(i)}>
+                    <span
+                      className="rank-fill"
+                      style={{ width: `${(place.count / Math.max(1, data.stats.visits)) * 100}%` }}
+                    />
+                    <span className="country-code">
+                      {'code' in place ? place.code : place.countryCode}
+                    </span>
+                    <strong>{place.name}</strong>
+                    <b>{count(place.count)}</b>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="quiet-empty">A small world, once your first visitors arrive.</p>
+          )}
+          <div className="panel-footnote">
+            <span>Approximate location of the connection.</span>
+            <button className="text-button" onClick={openOrigins}>
+              Explore origins <ArrowRight size={13} />
+            </button>
           </div>
         </section>
       </div>
-      {data.network && <OriginStrip network={data.network} open={openOrigins} />}
       <section className="panel visits-panel">
         <div className="panel-heading">
           <div>
@@ -841,8 +869,8 @@ function OverviewPage({
               </div>
             }
           >
-            Send a controlled agent through check-in, then explore its answers and timeline. Nothing
-            is pre-populated.
+            Once connected, incoming visits appear here. Open your website with an agent to see its
+            first trail. Your customer data starts empty.
           </Empty>
         )}
       </section>
@@ -907,124 +935,6 @@ function OverviewPage({
         </div>
       )}
     </>
-  );
-}
-
-function TrafficChart({ points, empty }: { points: Overview['chart']; empty: boolean }) {
-  const [compact, setCompact] = useState(() => matchMedia('(max-width: 650px)').matches);
-  useEffect(() => {
-    const media = matchMedia('(max-width: 650px)');
-    const change = () => setCompact(media.matches);
-    media.addEventListener('change', change);
-    return () => media.removeEventListener('change', change);
-  }, []);
-  const width = compact ? 340 : 700,
-    height = 180,
-    left = 34,
-    right = 12,
-    top = 15,
-    bottom = 28;
-  const maximum = Math.max(4, ...points.flatMap((p) => [p.visits, p.events]));
-  const x = (i: number) => left + (i * (width - left - right)) / Math.max(1, points.length - 1);
-  const y = (value: number) => top + (height - top - bottom) * (1 - value / maximum);
-  const line = (key: 'events' | 'visits') =>
-    points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p[key])}`).join(' ');
-  const labelStep = Math.max(1, Math.ceil((points.length - 1) / (compact ? 3 : 4)));
-  return (
-    <div className="chart-wrap">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={empty ? 'No traffic recorded yet.' : 'Event and visit counts over time.'}
-      >
-        <defs>
-          <linearGradient id="traffic-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3d7656" stopOpacity=".13" />
-            <stop offset="100%" stopColor="#3d7656" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0, 0.5, 1].map((r) => (
-          <g key={r}>
-            <line
-              x1={left}
-              x2={width - right}
-              y1={y(maximum * r)}
-              y2={y(maximum * r)}
-              stroke="#e5ece7"
-              strokeDasharray="3 5"
-            />
-            <text
-              x={left - 10}
-              y={y(maximum * r) + 4}
-              textAnchor="end"
-              fill="#697588"
-              fontSize="10"
-            >
-              {Math.round(maximum * r)}
-            </text>
-          </g>
-        ))}
-        {!empty && (
-          <>
-            <path
-              d={`${line('events')} L${x(points.length - 1)},${y(0)} L${x(0)},${y(0)} Z`}
-              fill="url(#traffic-fill)"
-            />
-            <path
-              d={line('visits')}
-              fill="none"
-              stroke="#81998a"
-              strokeWidth="2"
-              strokeDasharray="4 4"
-            />
-            <path d={line('events')} fill="none" stroke="#3d7656" strokeWidth="2.4" />
-            {points.map((p, i) => (
-              <circle
-                key={p.time}
-                cx={x(i)}
-                cy={y(p.events)}
-                r={p.events > 0 ? 3 : 0}
-                fill="#4462dc"
-              >
-                <title>
-                  {date(p.time)}: {p.events} events, {p.visits} visits
-                </title>
-              </circle>
-            ))}
-          </>
-        )}
-        {points
-          .filter(
-            (_p, i) =>
-              i === 0 ||
-              i === points.length - 1 ||
-              (i % labelStep === 0 && points.length - 1 - i >= labelStep * 0.6),
-          )
-          .map((p) => (
-            <text
-              key={p.time}
-              x={x(points.indexOf(p))}
-              y={height - 4}
-              textAnchor={points.indexOf(p) === points.length - 1 ? 'end' : 'middle'}
-              fill="#697588"
-              fontSize="10"
-            >
-              {points.length > 7
-                ? new Date(p.time).toLocaleTimeString('en-GB', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : new Date(p.time).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
-            </text>
-          ))}
-      </svg>
-      {empty && (
-        <div className="chart-empty">
-          <span>No recorded activity yet</span>
-          <small>Your live traffic will appear here.</small>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -1309,8 +1219,8 @@ function QuestionsPage({
           <h2>At your website’s door</h2>
           <p>
             Ask recognized interactive agents once, then return them to their original destination.
-            Known fetch-only clients (including Claude chat), search indexers and unknown visitors
-            continue with request logging; their intent stays unknown unless they share it.
+            HTTP fetch tools, search indexers and unknown visitors continue with request logging;
+            their intent stays unknown unless they share it.
           </p>
         </div>
         <label>
@@ -1884,7 +1794,7 @@ function VisitDrawer({
                           {hasAnswers
                             ? 'No objective supplied'
                             : fetchOnly
-                              ? 'Fetch-only client · content allowed'
+                              ? 'Content allowed · intent unknown'
                               : questionsShown
                                 ? 'Questions shown · no response received'
                                 : 'Intent unknown'}

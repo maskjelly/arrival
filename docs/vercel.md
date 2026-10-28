@@ -50,4 +50,4 @@ Source references: [Vercel filesystem limits](https://vercel.com/kb/guide/is-sql
 
 ## Fetch-only compatibility
 
-With Next.js SDK 0.2.2, known Claude/ChatGPT/Perplexity fetch user agents receive the actual page, without an introduction. A request is recorded with intent unknown. Browser automation still uses the introduction. To retest Claude chat, use a fresh conversation and a fresh URL query to reduce reuse of its earlier fetched form; Arrival cannot purge a provider cache. SDK/HTTP tests establish response behavior, not willingness or capabilities of every chatbot product.
+With Next.js SDK 0.2.3, ordinary HTTP fetches (including unfamiliar tools and known Claude/ChatGPT/Perplexity fetch user agents) receive the actual page, without an introduction. A request is recorded with intent unknown. Browser automation still uses the introduction. To retest Claude chat, use a fresh conversation and a fresh URL query to reduce reuse of its earlier fetched form; Arrival cannot purge a provider cache. SDK/HTTP tests establish response behavior, not willingness or capabilities of every chatbot product.

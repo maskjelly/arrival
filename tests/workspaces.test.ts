@@ -62,6 +62,14 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.equal(bo.data.site.name, 'Client B');
     assert.equal(ao.data.total, 1);
     assert.equal(bo.data.total, 1);
+    assert.equal(
+      ao.data.chart.reduce((n: number, p: any) => n + p.visits, 0),
+      1,
+    );
+    assert.equal(
+      bo.data.chart.reduce((n: number, p: any) => n + p.visits, 0),
+      1,
+    );
     assert.equal(ao.data.sessions[0].entryPath, '/only-a');
     assert.equal(bo.data.sessions[0].entryPath, '/only-b');
     assert.equal((await read('/api/admin/sessions/' + ao.data.sessions[0].id, bc)).status, 404);
@@ -91,6 +99,9 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
       'Mozilla/5.0 (compatible; Claude-User/1.0; +claude-user@anthropic.com)',
       'ChatGPT-User/1.0',
       'Perplexity-User/1.0',
+      'curl/8.0',
+      'python-httpx/0.28',
+      'UnfamiliarAgent/1.0',
     ]) {
       let cookie = '';
       for (const path of ['/resume', '/plain-corners']) {
@@ -111,7 +122,7 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     const fetchVisits = (await read('/api/admin/overview', ac)).data.sessions.filter((v: any) =>
       v.eventTypes.includes('entry_observed'),
     );
-    assert.equal(fetchVisits.length, 3);
+    assert.equal(fetchVisits.length, 6);
     assert.ok(
       fetchVisits.every((v: any) => !v.objective && !v.eventTypes.includes('entry_presented')),
     );
@@ -123,7 +134,11 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     pending.length = 0;
     const first = await handleArrival(
       new Request('https://a.test/only-a?original=kept', {
-        headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' },
+        headers: {
+          'user-agent': 'Arrival-BrowserAgent/1.0',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+        },
       }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },
@@ -160,7 +175,13 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.ok(next.startsWith('https://a.test/only-a?original=kept'));
     assert.ok(next.includes('__arrival_pass='));
     const continued = await handleArrival(
-      new Request(next, { headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' } }),
+      new Request(next, {
+        headers: {
+          'user-agent': 'Arrival-BrowserAgent/1.0',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+        },
+      }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },
     );
@@ -169,6 +190,8 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     const detail = await read('/api/admin/overview', ac);
     const visit = detail.data.sessions.find((v: any) => v.agentName === 'Natural visitor');
     assert.equal(visit.objective, 'Compare the API');
+    assert.ok(!detail.data.sources.some((s: any) => s.name === 'Natural visitor'));
+    assert.ok(!detail.data.chart.some((p: any) => p.clients?.['Natural visitor']));
     assert.ok(visit.eventTypes.includes('entry_continued'));
     const hostSession = /arrival_host_session=([^;]+)/.exec(continued.cookies![0])![1];
     const linked = await handleArrival(
@@ -219,7 +242,11 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     assert.equal(tokenAsAnswer.status, 401);
     const bad = await handleArrival(
       new Request('https://a.test/only-a?__arrival_pass=forged', {
-        headers: { 'user-agent': 'Arrival-BrowserAgent/1.0' },
+        headers: {
+          'user-agent': 'Arrival-BrowserAgent/1.0',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+        },
       }),
       cfg,
       { waitUntil: (p: Promise<any>) => pending.push(p) },

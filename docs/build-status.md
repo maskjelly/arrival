@@ -7,7 +7,7 @@
 - Customer workspace creation/sign-in, site-scoped ingestion keys, scoped records/reports/exports.
 - Reusable Next.js package and one standard setup flow; browser-only HTML/Wix/Shopify snippets remain available.
 - Question editing and per-visit snapshots; declared objectives separated from observed/integration-reported behavior.
-- Known fetch-only client policy: allow content, retain request/network analytics, mark undeclared intent unknown. Dashboard distinguishes unanswered introductions from submitted answers.
+- Default HTTP retrieval policy: allow content, retain request/network analytics, mark undeclared intent unknown. Dashboard distinguishes unanswered introductions from submitted answers.
 - Entry funnel, visits, country/state/network breakdowns and offline IP lookup.
 - Vercel deployment with durable Turso storage; local SQLite development.
 - Product website, customer onboarding, dashboard and responsive/accessibility checks.

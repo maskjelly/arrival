@@ -458,27 +458,40 @@ export async function createApp(
       time: string;
       visits: number;
       events: number;
+      clients: Record<string, { visits: number; events: number }>;
     }[] = [];
     const hourly = range === '24h';
     const step = hourly ? 3600000 : 86400000;
     const start = Math.floor((Date.now() - (hourly ? 23 : 6) * step) / step) * step;
     const buckets = await store
       .scoped(
-        `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM events WHERE created_at>=? GROUP BY bucket`,
+        `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, (SELECT user_agent FROM sessions WHERE sessions.id=events.session_id) AS client, COUNT(*) AS n FROM events WHERE created_at>=? GROUP BY bucket,client`,
       )
       .all(new Date(start).toISOString());
     const visitBuckets = await store
       .scoped(
-        `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, COUNT(*) AS n FROM sessions WHERE created_at>=? GROUP BY bucket`,
+        `SELECT substr(created_at,1,${hourly ? 13 : 10}) AS bucket, user_agent AS client, COUNT(*) AS n FROM sessions WHERE created_at>=? GROUP BY bucket,client`,
       )
       .all(new Date(start).toISOString());
     for (let i = 0; i < (hourly ? 24 : 7); i++) {
       const time = new Date(start + i * step).toISOString(),
         key = time.slice(0, hourly ? 13 : 10);
+      const clients: Record<string, { visits: number; events: number }> = Object.create(null);
+      for (const b of visitBuckets.filter((b) => b.bucket === key)) {
+        const client = identify(String(b.client), '').agentName;
+        clients[client] ??= { visits: 0, events: 0 };
+        clients[client].visits += Number(b.n);
+      }
+      for (const b of buckets.filter((b) => b.bucket === key)) {
+        const client = identify(String(b.client), '').agentName;
+        clients[client] ??= { visits: 0, events: 0 };
+        clients[client].events += Number(b.n);
+      }
       chart.push({
         time,
-        visits: Number(visitBuckets.find((b) => b.bucket === key)?.n ?? 0),
-        events: Number(buckets.find((b) => b.bucket === key)?.n ?? 0),
+        clients,
+        visits: Object.values(clients).reduce((n, c) => n + c.visits, 0),
+        events: Object.values(clients).reduce((n, c) => n + c.events, 0),
       });
     }
     const pages = await store
@@ -486,11 +499,20 @@ export async function createApp(
         "SELECT path, COUNT(*) AS count FROM events WHERE type IN ('page_view','request') AND created_at>=? GROUP BY path ORDER BY count DESC LIMIT 6",
       )
       .all(since);
-    const sources = await store
+    const sourceRows = await store
       .scoped(
-        'SELECT agent_name AS name, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY agent_name ORDER BY count DESC LIMIT 5',
+        'SELECT user_agent AS userAgent, COUNT(*) AS count FROM sessions WHERE created_at>=? GROUP BY user_agent',
       )
       .all(since);
+    const sourceCounts = new Map<string, number>();
+    for (const row of sourceRows) {
+      const name = identify(String(row.userAgent), '').agentName;
+      sourceCounts.set(name, (sourceCounts.get(name) ?? 0) + Number(row.count));
+    }
+    const sources = [...sourceCounts]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
     const networkCounts = (await store
       .scoped(
         `SELECT COUNT(DISTINCT json_extract(network,'$.location.countryCode')) AS countryCount,
@@ -784,7 +806,7 @@ export async function createApp(
       },
       instructions:
         site.entryMode === 'ask'
-          ? 'At the connected website, recognized interactive agents receive a short introduction at their original destination. Answer the website questions once, then follow the continuation URL. Forms and a URL-based submission path are provided there. Never submit private prompts or credentials. Known fetch-only clients, search indexers and unrecognized clients are observed without a required introduction; outages fail open. Request evidence does not reveal their intent.'
+          ? 'At the connected website, recognized interactive agents receive a short introduction at their original destination. Answer the website questions once, then follow the continuation URL. Forms and a URL-based submission path are provided there. Never submit private prompts or credentials. Ordinary HTTP fetches, known fetch-only clients, search indexers and unrecognized clients are observed without a required introduction; outages fail open. Request evidence does not reveal their intent.'
           : 'Continue your task normally. If your tools allow it, optionally share a short task summary. Never send private prompts, credentials or personal information. Skipping or a telemetry failure does not restrict website access.',
       questions: site.questions,
       questionsVersion: site.questionsVersion,
@@ -1183,7 +1205,7 @@ export async function createApp(
         visit.id,
         'entry_observed',
         cleanPath(body.path),
-        { reason: 'fetch_only', capabilitySource: 'user-agent claim' },
+        { reason: 'fetch_only', policySource: 'request headers; unverified' },
         { source: 'integration reported', dedupeKey: `entry-observed:${visit.id}` },
       );
     if (body.entryContinued)

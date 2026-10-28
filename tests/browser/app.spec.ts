@@ -19,7 +19,7 @@ test('public landing explains a natural agent arrival and demonstrates the intro
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'Meet the agents at your door.',
+    /Your next visitor\s*might be an agent/,
   );
   await page.getByRole('button', { name: 'Follow the visit' }).click();
   await page.getByLabel('What are you here to do?').fill('Evaluate a plan for a six-person team.');
@@ -533,9 +533,7 @@ test('unanswered introductions and observed fetch clients have distinct honest a
   await page.goto('/app/fetch-policy?view=sessions');
   await page.locator('.visitor-cell').filter({ hasText: 'Claude-User' }).click();
   const drawer = page.getByRole('dialog', { name: 'Visit details' });
-  await expect(
-    drawer.getByText('Fetch-only client · content allowed', { exact: true }),
-  ).toBeVisible();
+  await expect(drawer.getByText('Content allowed · intent unknown', { exact: true })).toBeVisible();
   await expect(
     drawer.getByText('Intent unknown. This client was allowed to read without answering.', {
       exact: false,
@@ -548,4 +546,33 @@ test('unanswered introductions and observed fetch clients have distinct honest a
     drawer.getByText('Questions shown · no response received', { exact: true }),
   ).toBeVisible();
   await expect(drawer.getByText('No response received', { exact: true })).toHaveCount(6);
+});
+
+test('reference-style charts filter clients and expose real bucket values by keyboard', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByLabel('Chart client', { exact: true }).selectOption('Claude-User');
+  const scrub = page.getByRole('slider', { name: 'Inspect time bucket' });
+  await scrub.focus();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const tooltip = page.getByRole('status');
+  await expect(tooltip.getByText('9', { exact: true })).toBeVisible();
+  await expect(tooltip.getByText('15', { exact: true })).toBeVisible();
+  await page.getByLabel('Chart client', { exact: true }).selectOption('');
+  await scrub.focus();
+  await page.keyboard.press('Home');
+  await expect(tooltip.getByText('13', { exact: true })).toBeVisible();
+  await expect(tooltip.getByText('8', { exact: true })).toBeVisible();
+  await expect(tooltip.getByText('Claude-User', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Read-only fetch', exact: true }).click();
+  await page.getByRole('button', { name: 'Follow the visit', exact: false }).click();
+  await expect(page.locator('.m-receipt')).toContainText(
+    'Unknown. This tool reads pages without answering forms.',
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

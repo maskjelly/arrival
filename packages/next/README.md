@@ -5,7 +5,7 @@ Use the same integration for any customer website. The setup screen supplies you
 ## Install
 
 ```sh
-npm install https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.2/arrival-next-0.2.2.tgz
+npm install https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.3/arrival-next-0.2.3.tgz
 ```
 
 Set these in your host's environment and redeploy:
@@ -51,6 +51,7 @@ The component loads the public browser tracker before hydration. Browser-reporte
 - Answer: POST the form, or use the described GET submission when the tool can only open URLs. Only short task context belongs in URL answers; POST is preferred because URL queries can enter host logs.
 - Continue: HTTP 303 to the original path/query. Cookies retain clearance for one hour; stateless tools can reuse `__arrival_pass` on this website.
 - Detection: user-agent patterns and a cooperative browser automation signal. Names are not verified. A spoofed human browser can evade detection.
+- Ordinary HTTP fetches, including unfamiliar tools: allow content without questions by default. No vendor-specific setup is needed. A browser navigation claim (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`) or the browser automation handoff enables the interactive path for matched agents. Headers remain unverified policy hints.
 - Known fetch clients (`Claude-User`, `ChatGPT-User`, `Perplexity-User`): allow content without required questions. Collect request/network evidence and mark intent unknown. These header patterns are policy hints, not verified capabilities or identities. An explicit browser automation handoff still uses the introduction.
 - Search indexers: observe without questions by default. This is a deliberate coverage boundary.
 - Unknown visitors: observe; do not claim they are human.

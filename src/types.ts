@@ -132,7 +132,12 @@ export type Overview = {
     automated: number;
     demo: number;
   };
-  chart: { time: string; visits: number; events: number }[];
+  chart: {
+    time: string;
+    visits: number;
+    events: number;
+    clients?: Record<string, { visits: number; events: number }>;
+  }[];
   pages: { path: string; count: number }[];
   sources: { name: string; count: number }[];
   network: {

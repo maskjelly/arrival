@@ -13,6 +13,7 @@ type Row = Record<string, unknown>;
 const sessionSelect = `SELECT s.*,
  (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id) AS event_count,
  (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type='page_view') AS page_count,
+ (SELECT COUNT(*) FROM events e WHERE e.session_id=s.id AND e.type='request') AS request_count,
  (SELECT json_group_array(DISTINCT type) FROM events e WHERE e.session_id=s.id) AS event_types
  FROM sessions s`;
 export const defaultQuestions: Question[] = [
@@ -314,6 +315,7 @@ export class Store {
       permissions: json(row.permissions),
       eventCount: Number(counts.events),
       pageCount: Number(counts.pages ?? 0),
+      requestCount: Number(row.request_count ?? 0),
       objective: typeof answers.objective === 'string' ? answers.objective : '',
       eventTypes: types,
     };

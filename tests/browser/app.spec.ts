@@ -298,6 +298,10 @@ test('an external website collects voluntary answers and annotated activity thro
 test('workspace views support direct links, keyboard navigation and accessible contrast', async ({
   page,
 }) => {
+  await page.goto('/app');
+  await expect(page.getByRole('heading', { name: 'Agent traffic' })).toBeVisible();
+  const existing = await (await page.request.get('/api/admin/overview')).json();
+  if (!existing.total) expect((await page.request.post('/api/admin/run-demo')).status()).toBe(200);
   for (const view of ['overview', 'sessions', 'origins', 'questions', 'integration', 'project']) {
     await page.goto('/app?view=' + view);
     await expect(page.locator('.page-heading h1')).toBeVisible();
@@ -554,6 +558,9 @@ test('reference-style charts filter clients and expose real bucket values by key
   await page.goto('/');
   await page.getByLabel('Chart client', { exact: true }).selectOption('Claude-User');
   const scrub = page.getByRole('slider', { name: 'Inspect time bucket' });
+  await scrub.focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('status').getByText('17', { exact: true })).toBeVisible();
   await scrub.focus();
   await page.keyboard.press('Home');
   await page.keyboard.press('ArrowRight');

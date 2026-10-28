@@ -129,6 +129,7 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     for (const visit of fetchVisits) {
       const detail = (await read('/api/admin/sessions/' + visit.id, ac)).data;
       assert.equal(detail.events.filter((e: any) => e.type === 'request').length, 2);
+      assert.equal(detail.visit.requestCount, 2);
       assert.deepEqual(detail.visit.answers, {});
     }
     pending.length = 0;

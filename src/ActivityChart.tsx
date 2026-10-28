@@ -244,6 +244,13 @@ export function ActivityChart({
             min="0"
             max={Math.max(0, chart.length - 1)}
             value={active ?? chart.length - 1}
+            onFocus={() =>
+              setActive((current) => Math.min(current ?? chart.length - 1, chart.length - 1))
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Home') setActive(0);
+              if (e.key === 'End') setActive(chart.length - 1);
+            }}
             onChange={(e) => setActive(Number(e.target.value))}
           />
           <span>{active !== null && point ? label(point.time) : 'Hover or scrub to explore'}</span>

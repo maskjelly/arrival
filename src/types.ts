@@ -105,6 +105,7 @@ export type Visit = {
   permissions: string[];
   eventCount: number;
   pageCount: number;
+  requestCount?: number;
   objective: string;
   eventTypes: string[];
 };

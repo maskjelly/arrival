@@ -992,7 +992,8 @@ function VisitTable({
                 </td>
                 <td>
                   <span className="activity-count">
-                    {visit.pageCount} <small>pages</small>
+                    {visit.source === 'server' ? (visit.requestCount ?? 0) : visit.pageCount}{' '}
+                    <small>{visit.source === 'server' ? 'requests' : 'page views'}</small>
                     <span>·</span>
                     {visit.eventCount} <small>events</small>
                   </span>
@@ -1035,7 +1036,9 @@ function VisitTable({
               </span>
               <span className="mobile-visit-meta">
                 <span>
-                  {visit.pageCount} pages · {visit.eventCount} events
+                  {visit.source === 'server' ? (visit.requestCount ?? 0) : visit.pageCount}{' '}
+                  {visit.source === 'server' ? 'requests' : 'page views'} · {visit.eventCount}{' '}
+                  events
                 </span>
                 <time>{date(visit.createdAt)}</time>
               </span>
@@ -1742,8 +1745,10 @@ function VisitDrawer({
                 <strong>{date(visit.createdAt)}</strong>
               </div>
               <div>
-                <small>Pages</small>
-                <strong>{visit.pageCount}</strong>
+                <small>{visit.source === 'server' ? 'Requests' : 'Page views'}</small>
+                <strong>
+                  {visit.source === 'server' ? (visit.requestCount ?? 0) : visit.pageCount}
+                </strong>
               </div>
               <div>
                 <small>Events</small>

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { ArrowBendDownLeft, ArrowRight, Check, Code, Globe, Path } from '@phosphor-icons/react';
+import { AgentDoodle, HeroGraffiti, Scribble } from './AgentGraffiti.tsx';
+import AgentMap from './AgentMap.tsx';
 import { ActivityChart } from './ActivityChart.tsx';
 import { ClientMark } from './ClientMark.tsx';
 import './landing.css';
@@ -48,6 +50,7 @@ export default function Landing() {
       </header>
       <main id="product-main">
         <section className="m-hero">
+          <HeroGraffiti />
           <div className="m-hero-copy">
             <p className="m-product-note">A small hello for the agent web.</p>
             <h1>
@@ -67,6 +70,10 @@ export default function Landing() {
                 See the introduction
               </a>
             </div>
+          </div>
+          <div className="hero-under-note" aria-hidden="true">
+            <span>tiny footprints. big picture.</span>
+            <Scribble />
           </div>
           <div className="m-preview-wrap">
             <div className="m-hand-note">
@@ -134,7 +141,16 @@ export default function Landing() {
             </div>
           </div>
         </section>
+        <AgentMap />
         <section className="m-experience" id="experience">
+          <div className="experience-graffiti" aria-hidden="true">
+            <AgentDoodle kind="courier" />
+            <span>
+              a quick hello,
+              <br />
+              not a side quest.
+            </span>
+          </div>
           <div className="m-section-title">
             <span className="handwritten">Nice to meet you. Carry on.</span>
             <h2>A hello, without a detour.</h2>
@@ -272,6 +288,14 @@ export default function Landing() {
           </div>
         </section>
         <section className="m-understand" id="understand">
+          <div className="evidence-graffiti" aria-hidden="true">
+            <span>
+              every little breadcrumb
+              <br />
+              has a story.
+            </span>
+            <Scribble />
+          </div>
           <div className="m-section-title">
             <h2>
               Every visit leaves a trail.
@@ -393,6 +417,14 @@ export default function Landing() {
           </div>
         </section>
         <section className="m-last-call">
+          <div className="last-call-agent" aria-hidden="true">
+            <AgentDoodle />
+            <span>
+              see you at
+              <br />
+              the front door.
+            </span>
+          </div>
           <span className="handwritten">Wonder who’s there?</span>
           <h2>
             Leave the door open.

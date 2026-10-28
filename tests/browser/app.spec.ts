@@ -48,6 +48,14 @@ test('public landing explains a natural agent arrival and demonstrates the intro
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '.data/screenshots/landing-mobile.png', fullPage: true });
+  await settleMotion(page);
+  const mobileLanding = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze();
+  expect(summarize(mobileLanding.violations)).toEqual([]);
+  await page.getByRole('link', { name: 'Follow an example', exact: false }).click();
+  await expect(page).toHaveURL(/#experience$/);
+
   await page.getByRole('link', { name: 'Set up Arrival', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Start with your website.' })).toBeVisible();
 });

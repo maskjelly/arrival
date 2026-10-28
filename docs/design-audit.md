@@ -29,3 +29,9 @@ Design quality remains a judgment. Passing these checks does not establish unive
 - Workspace/demo/tab entrances take 150–200ms; the visit drawer enters in 240ms and exits in 140ms. Interrupted opens can be dismissed without waiting.
 - Buttons use short press feedback; ranking fills animate with transforms. No decorative loops were added.
 - Keyboard interaction and reduced-motion preferences skip positional animation. Accessibility scans await finite presentation transitions before measuring contrast; separate tests exercise rapid retargeting, dismissal and reduced-motion behavior.
+
+## Expanded agent canvas
+
+The landing page now uses a 1512px canvas, a larger headline and original inline-vector agent characters. Ink trails, pink paper stickers and handwritten marginal notes fill the space around the product without placing decoration over controls. A connected visitor → Arrival → website illustration explains the flow, with explicit illustrative/identity-claim labels. Desktop connections become a vertical trail on phones. The data workspace and customer integration are unchanged.
+
+Artwork is implemented as decorative SVG components, not raster screenshots or replacement interface icons. Reduced-motion settings disable sticker hover movement; the existing chart, native links and interactive visit demonstration remain usable. Phone layouts suppress long character captions and constrain decorative overflow to the canvas.

@@ -120,6 +120,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS workspaces (site_id TEXT PRIMARY KEY REFERENCES sites(id), slug TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS entry_challenges (token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), site_id TEXT NOT NULL REFERENCES sites(id), expires_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS entry_challenges_expiry ON entry_challenges(expires_at);
+      CREATE TABLE IF NOT EXISTS visitor_tokens (token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), site_id TEXT NOT NULL REFERENCES sites(id), expires_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS visitor_tokens_expiry ON visitor_tokens(expires_at);
       CREATE TABLE IF NOT EXISTS entry_policies (site_id TEXT PRIMARY KEY REFERENCES sites(id), mode TEXT NOT NULL DEFAULT 'ask', message TEXT NOT NULL DEFAULT 'A quick introduction, then back to your task.');
     `);
     if (
@@ -383,6 +385,32 @@ export class Store {
     const row = await this.db
       .prepare(
         'SELECT session_id FROM entry_challenges WHERE token_hash=? AND site_id=? AND expires_at>?',
+      )
+      .get(hash(token), this.siteId, now());
+    return row ? this.get(String(row.session_id)) : undefined;
+  }
+  async visitorToken(id: string) {
+    const token = credential();
+    await this.db.prepare('DELETE FROM visitor_tokens WHERE expires_at<?').run(now());
+    await this.db
+      .prepare(
+        'INSERT INTO visitor_tokens(token_hash,session_id,site_id,expires_at) SELECT ?,?,?,? WHERE EXISTS(SELECT id FROM sessions WHERE id=? AND site_id=?)',
+      )
+      .run(
+        hash(token),
+        id,
+        this.siteId,
+        new Date(Date.now() + 3600000).toISOString(),
+        id,
+        this.siteId,
+      );
+    return token;
+  }
+  async byVisitorToken(token: string) {
+    if (!token) return undefined;
+    const row = await this.db
+      .prepare(
+        'SELECT session_id FROM visitor_tokens WHERE token_hash=? AND site_id=? AND expires_at>?',
       )
       .get(hash(token), this.siteId, now());
     return row ? this.get(String(row.session_id)) : undefined;

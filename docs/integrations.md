@@ -2,7 +2,7 @@
 
 For the complete customer installation, use [Arrival for Next.js](../packages/next/README.md). Create a workspace at `/start`; use its generated site ID, key, middleware export and browser component. This includes the automatic entry question step.
 
-The examples below describe browser-only prompts and lower-level request reporting. They remain useful for HTML/Wix/Shopify or custom adapters, but do not enforce a question before HTTP content. Browser and server records remain separate.
+The examples below describe browser-only prompts and lower-level request reporting. They remain useful for HTML/Wix/Shopify or custom adapters, but do not enforce a question before HTTP content. These lower-level helpers do not merge browser and server records; the standard Next.js integration does.
 
 # Install Arrival
 
@@ -147,7 +147,7 @@ export const config = {
 
 This records arrival at the proxy, not the final application's response status. The helper leaves that status unknown; a handler reporting after an actual response can pass `status`. Keep reporting alive with the host's `waitUntil` mechanism, rather than awaiting it before returning website content. [Next.js Proxy and waitUntil](https://nextjs.org/docs/app/api-reference/file-conventions/proxy).
 
-Browser and server helpers currently produce separate visit records. Automatic cross-channel merging is not implemented; neither session ID is a verified identity.
+The standard Next.js SDK links browser events to the server visit through a same-origin endpoint and a scoped one-hour visitor token. The helpers below produce separate records unless the host implements correlation. A session is not a verified identity.
 
 ## Custom actions and programmatic answers
 

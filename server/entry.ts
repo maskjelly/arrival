@@ -29,7 +29,7 @@ export function installEntry(
       version: site.questionsVersion,
     });
   });
-  app.post('/api/entry/start', async (req, res) => {
+  app.post(['/api/entry/start', '/api/entry/browser'], async (req, res) => {
     if (!(await auth(req, res))) return;
     const parsed = z
       .object({
@@ -49,8 +49,12 @@ export function installEntry(
     }
     const b = parsed.data;
     const site = await store.site();
+    const browser = req.path.endsWith('/browser');
+    if (!browser && site.entryMode !== 'ask') {
+      res.json({ mode: 'observe' });
+      return;
+    }
     let visit = await store.byExternal(`server:${b.sessionId}`);
-    let challenge: string;
     if (!visit) {
       const created = await store.createSession({
         source: 'server',
@@ -62,11 +66,12 @@ export function installEntry(
         ...identify(b.userAgent, b.ip ?? '', 'integration reported'),
       });
       visit = created.visit;
-      challenge = await store.entryChallenge(visit.id);
-    } else {
-      // Independent visit-only challenges let concurrent page requests complete without invalidating one another.
-      challenge = await store.entryChallenge(visit.id);
     }
+    if (browser) {
+      res.set('Cache-Control', 'no-store').json({ token: await store.visitorToken(visit.id) });
+      return;
+    }
+    const challenge = await store.entryChallenge(visit.id);
     if (b.browserAutomation)
       await store.environment(visit.id, { webdriver: true }, 'browser reported');
     await store.network(

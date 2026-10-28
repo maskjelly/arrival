@@ -35,7 +35,7 @@ Whiteye uses that exact installation. Its private dashboard is `/app/whiteye`. I
 2. Confirm `/api/admin/overview` returns 401 without an owner session and `/api/auth/local` cannot bootstrap publicly.
 3. Sign into `/app`, confirm both local IP datasets are available and inspect the saved site origin/questions.
 4. Fetch `https://whiteye.in/`, `/blog` and `/resume` with one cookie jar and a recognizable test User-Agent. The server visit should show those paths with integration-reported provenance.
-5. In a browser, visit the website, optionally answer questions, navigate and check the browser record separately.
+5. In a browser, visit the website, answer the automatic introduction, navigate and check that browser activity appears on the same server visit.
 6. Open a second owner session and confirm the same visits persist. Do not equate a health response or successful build with collected website traffic.
 
 Customer workspaces start with the standard question set and can edit it independently. Previous local demo records remain in `.data/arrival.sqlite`; they are not silently presented as new whiteye traffic.
@@ -44,6 +44,6 @@ Customer workspaces start with the standard question set and can edit it indepen
 
 Ask the agent to open the live website directly, read two projects and the résumé, and recommend a project for a Rust/AI systems role. Include a fresh test query in the starting URL to reduce upstream fetch-cache reuse. The request log intentionally strips that query; identify the run by time and paths. Cached search snippets alone may not contact the website.
 
-For optional intent answers, let it follow the automatic introduction at the page it requested. The integration also exposes `https://whiteye.in/.well-known/arrival.json` for discovery and provides a GET answer path for read-only HTTP tools. A read-only chatbot can generate request telemetry but cannot submit a form or reveal its private task context. Lack of answers is not a collection failure. Browser/server records are separate, and tools that do not retain cookies may create separate visits for each request.
+For intent answers, let it follow the automatic introduction at the page it requested. The integration also exposes `https://whiteye.in/.well-known/arrival.json` for discovery and provides a GET answer path for read-only HTTP tools. Read-only tools can use the GET answer path; willingness to answer depends on the agent. Never request private task context. The standard Next.js SDK links browser activity to its host session. Tools that retain neither cookies nor the continuation parameter may create separate visits on later requests.
 
 Source references: [Vercel filesystem limits](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel), [request-header trust](https://vercel.com/docs/headers/request-headers), [Turso on Vercel](https://vercel.com/marketplace/tursocloud/database), and [Next.js middleware background work](https://nextjs.org/docs/15/app/api-reference/file-conventions/middleware).

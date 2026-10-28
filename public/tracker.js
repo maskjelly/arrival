@@ -106,32 +106,55 @@
   };
   const suspected =
     environment.webdriver || /bot|agent|headless|playwright|puppeteer/i.test(environment.userAgent);
-  const ready = (
-    external
-      ? send(
-          { type: 'start', path: location.pathname, referrer: document.referrer, environment },
-          endpoint,
-        )
-      : send(environment, '/api/agent/environment')
-  ).then((data) => {
-    if (data?.sessionToken) {
-      token = data.sessionToken;
-      try {
-        sessionStorage.setItem(storageKey, token);
-      } catch {}
+  const linkBrowserSession = async () => {
+    if (!external || script.dataset.entry !== 'ask') return;
+    // The host issues a short-lived, visit-only token. No integration key reaches the browser.
+    try {
+      const response = await fetch(
+        '/__arrival/browser-session?path=' + encodeURIComponent(location.pathname),
+        { credentials: 'same-origin', signal: AbortSignal.timeout(10000) },
+      );
+      if (!response.ok) throw new Error('Session linking unavailable');
+      const data = await response.json();
+      if (!data.token) throw new Error('Missing visit token');
+      token = data.token;
+    } catch {
+      // Avoid counting a second visit when the host integration is temporarily unavailable.
+      disabled = true;
     }
-    questions = external ? data?.questions || [] : context.optional ? context.questions || [] : [];
-    answered = external ? !!data?.answered : !!context.answered;
-    if (
-      questions.length &&
-      !answered &&
-      !dismissed &&
-      (checkInMode === 'all' || (checkInMode === 'agents' && suspected))
+  };
+  const ready = linkBrowserSession()
+    .then(() =>
+      external
+        ? send(
+            { type: 'start', path: location.pathname, referrer: document.referrer, environment },
+            endpoint,
+          )
+        : send(environment, '/api/agent/environment'),
     )
-      showCheckIn();
-    document.dispatchEvent(new CustomEvent('arrival:ready', { detail: { ok: !data?.error } }));
-    return { ok: !!data && !data.error };
-  });
+    .then((data) => {
+      if (data?.sessionToken) {
+        token = data.sessionToken;
+        try {
+          sessionStorage.setItem(storageKey, token);
+        } catch {}
+      }
+      questions = external
+        ? data?.questions || []
+        : context.optional
+          ? context.questions || []
+          : [];
+      answered = external ? !!data?.answered : !!context.answered;
+      if (
+        questions.length &&
+        !answered &&
+        !dismissed &&
+        (checkInMode === 'all' || (checkInMode === 'agents' && suspected))
+      )
+        showCheckIn();
+      document.dispatchEvent(new CustomEvent('arrival:ready', { detail: { ok: !data?.error } }));
+      return { ok: !!data && !data.error };
+    });
   const event = async (type, details = {}) => {
     await ready;
     const data = { id: crypto.randomUUID(), type, path: location.pathname, ...details };

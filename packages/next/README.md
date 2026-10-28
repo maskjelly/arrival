@@ -5,7 +5,7 @@ Use the same integration for any customer website. The setup screen supplies you
 ## Install
 
 ```sh
-npm install https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.0/arrival-next-0.2.0.tgz
+npm install https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.1/arrival-next-0.2.1.tgz
 ```
 
 Set these in your host's environment and redeploy:

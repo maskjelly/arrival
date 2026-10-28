@@ -136,6 +136,53 @@ test('workspaces isolate questions, visits, credentials, reports and exports', a
     const visit = detail.data.sessions.find((v: any) => v.agentName === 'Natural visitor');
     assert.equal(visit.objective, 'Compare the API');
     assert.ok(visit.eventTypes.includes('entry_continued'));
+    const hostSession = /arrival_host_session=([^;]+)/.exec(continued.cookies![0])![1];
+    const linked = await handleArrival(
+      new Request('https://a.test/__arrival/browser-session?path=/only-a', {
+        headers: { Cookie: `arrival_host_session=${hostSession}`, 'sec-fetch-site': 'same-origin' },
+      }),
+      cfg,
+    );
+    const browserToken = (await linked.response!.json()).token;
+    assert.ok(browserToken.length > 20);
+    const secondToken = await post(
+      '/api/entry/browser',
+      { sessionId: hostSession, path: '/only-a', userAgent: 'Mozilla/5.0' },
+      { Authorization: `Bearer ${av.key}` },
+    );
+    assert.notEqual((await secondToken.json()).token, browserToken);
+    const browserHeaders = { Origin: 'https://a.test', Authorization: `Bearer ${browserToken}` };
+    const beforeLink = detail.data.total;
+    const linkedStart = await post(
+      '/api/collect/' + av.site.id,
+      { type: 'start', path: '/only-a', environment: { webdriver: true } },
+      browserHeaders,
+    );
+    assert.equal(linkedStart.status, 200);
+    assert.equal((await linkedStart.json()).sessionId, visit.id);
+    const browserEvent = await post(
+      '/api/collect/' + av.site.id,
+      {
+        type: 'event',
+        path: '/only-a',
+        event: { id: crypto.randomUUID(), type: 'click', path: '/only-a', label: 'Read project' },
+      },
+      browserHeaders,
+    );
+    assert.equal(browserEvent.status, 200);
+    assert.equal((await read('/api/admin/overview', ac)).data.total, beforeLink);
+    const wrongSite = await post(
+      '/api/collect/' + bv.site.id,
+      { type: 'event', path: '/', event: { id: crypto.randomUUID(), type: 'click', path: '/' } },
+      { Origin: 'https://b.test', Authorization: `Bearer ${browserToken}` },
+    );
+    assert.equal(wrongSite.status, 401);
+    const tokenAsAnswer = await post(
+      '/api/entry/answer',
+      { challenge: browserToken, answers: {} },
+      { Authorization: `Bearer ${av.key}` },
+    );
+    assert.equal(tokenAsAnswer.status, 401);
     const bad = await handleArrival(
       new Request('https://a.test/only-a?__arrival_pass=forged', {
         headers: { 'user-agent': 'ChatGPT-User/1.0' },

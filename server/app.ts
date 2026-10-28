@@ -1020,12 +1020,13 @@ export async function createApp(
       res,
     );
     if (!body) return;
-    let visit = await store.byToken(bearer(req));
+    const linkedVisit = channel === 'browser' ? await store.byVisitorToken(bearer(req)) : undefined;
+    let visit = linkedVisit ?? (await store.byToken(bearer(req)));
     if (body.type === 'start') {
       let token: string | undefined;
       if (
         !visit ||
-        !['browser', 'agent'].includes(visit.source) ||
+        (!['browser', 'agent'].includes(visit.source) && !linkedVisit) ||
         visit.status === 'expired' ||
         visit.status === 'revoked'
       ) {
@@ -1064,7 +1065,7 @@ export async function createApp(
     }
     if (
       !visit ||
-      !['browser', 'agent'].includes(visit.source) ||
+      (!['browser', 'agent'].includes(visit.source) && !linkedVisit) ||
       visit.status === 'revoked' ||
       visit.status === 'expired'
     ) {

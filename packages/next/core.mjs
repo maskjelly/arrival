@@ -204,6 +204,24 @@ export async function handleArrival(request, configuration, event) {
         }),
       };
     }
+    if (url.pathname === '/__arrival/browser-session') {
+      if (
+        request.method !== 'GET' ||
+        (request.headers.get('sec-fetch-site') &&
+          !['same-origin', 'none'].includes(request.headers.get('sec-fetch-site')))
+      )
+        return { response: new Response(null, { status: 403 }) };
+      const data = await api(options, '/api/entry/browser', {
+        sessionId,
+        path: safePath(url.searchParams.get('path') || '/').split('?')[0],
+        ...metadata,
+      });
+      const response = Response.json(data, {
+        headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
+      });
+      for (const c of cookies) response.headers.append('Set-Cookie', c);
+      return { response };
+    }
     if (url.pathname === '/__arrival/check-in') {
       const form =
         request.method === 'POST' ? new URLSearchParams(await request.text()) : url.searchParams;
@@ -299,15 +317,14 @@ export async function handleArrival(request, configuration, event) {
     const browserAutomation = url.searchParams.get('__arrival_browser') === '1';
     const kind = browserAutomation ? 'agent' : classify(ua);
     if (documentRequest && request.method === 'GET' && kind === 'agent' && !pass) {
-      const p = await policy(options);
-      if (p.mode === 'ask') {
-        const started = await api(options, '/api/entry/start', {
-          sessionId,
-          path: url.pathname,
-          ...metadata,
-          ...(browserAutomation ? { browserAutomation: true } : {}),
-        });
-        if (started.error) throw new Error(started.error);
+      const started = await api(options, '/api/entry/start', {
+        sessionId,
+        path: url.pathname,
+        ...metadata,
+        ...(browserAutomation ? { browserAutomation: true } : {}),
+      });
+      if (started.error) throw new Error(started.error);
+      if (started.mode === 'ask') {
         const original = new URL(url);
         original.searchParams.delete('__arrival_browser');
         const target = original.pathname + original.search;
@@ -328,6 +345,10 @@ export async function handleArrival(request, configuration, event) {
         return { response };
       }
     }
+    if (browserAutomation)
+      cookies.push(
+        `arrival_introduced=1; Path=/; SameSite=Lax; Max-Age=3600${url.protocol === 'https:' ? '; Secure' : ''}`,
+      );
     if (documentRequest) {
       schedule(
         event,

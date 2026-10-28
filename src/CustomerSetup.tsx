@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Site } from './types.ts';
 export const sdkUrl =
-  'https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.0/arrival-next-0.2.0.tgz';
+  'https://github.com/maskjelly/arrival/releases/download/sdk-v0.2.1/arrival-next-0.2.1.tgz';
 export const middlewareCode = `export { middleware } from '@arrival/next';
 export const config = {
   matcher: ['/((?!_next|api|favicon.ico|robots.txt|sitemap.xml|.*\\\\.(?:css|js|png|jpg|jpeg|gif|svg|woff2?)$).*)'],
